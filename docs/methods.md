@@ -195,6 +195,41 @@ rotation of 200 reached it (rank p < 0.005, gamma tail p = 2e-4). At p <= 0.005,
   not that one aircraft made it. The census therefore uses rotations, with the physical
   requirements, and measures their false-alarm rate on warm days instead.
 
+## Corrections after an independent code review
+
+A read-only review of the statistics and pipeline code found these, all fixed:
+
+- **Near-copy rotations made the null too easy to beat.** Rotations 1.6 deg apart move a
+  track at 50 km by 1.4 km, less than a match can absorb (up to ~5 km with the drift
+  correction), so neighbouring rotations match the same streaks. The real flights have no
+  rotation within 20 deg of them; but a rotation scored "as if real" was compared with its
+  near-copies, which deflated its evidence and so the null distribution of the day score.
+  In a simulation with this structure the 200-rotation day p-value was <= 0.01 on 6.3% of
+  null days. Now each set is compared only with sets at least 20 deg away, as the real one
+  is (match.comparable_sets); that brings it to 4.7%, and the gamma tail to 3.7%. The rest
+  is not a bug but a limit: there are only some 15-25 independent rotations, so no rotation
+  p-value below about 1/20 is exact. Census selection therefore uses an empirical null
+  (below), not the rotation p-value's tail.
+- F1 ties: placebo scores were stored in float32 and the real score compared in float64, so
+  ties broke in the real set's favour. All comparisons are now in float32.
+- Injection recovery counted a match to any flight as a recovery; it now requires the
+  injected flight.
+- Smaller: unknown ground speed (-1) was interpolated into fake slow points that were
+  dropped; the newness test counted scans that had not seen the air; points without a drift
+  could crash matched_points; a missing gamma tail became p = 1 instead of the rank p-value.
+
+## Non-meteorological echo
+
+Two of the warm-null false alarms came from echo that is not precipitation. At Buffalo,
+four of the nine significant matches on 1 July 2025 were at one spot 33 km south of the
+radar, which held a streak-shaped object in 23 scans through the day; on 3 November 2024 at
+Indianapolis the matched "streaks" were patches of speckled, radially streaked clear-air
+echo. The correlation coefficient separates these: snow and rain are above ~0.97, ground
+clutter, wind turbines, birds, insects and anomalous propagation well below 0.9. Each
+reflectivity scan (Level III N0B) is now paired with the same scan's correlation
+coefficient (N0C), and echo below 0.90 counts as no echo, before streak detection and the
+newness test. The Denver streaks measured 0.992-0.995.
+
 ## Lessons from development
 
 - A global average over all flights and all of the radar domain dilutes the signal to the
