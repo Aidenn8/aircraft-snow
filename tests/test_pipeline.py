@@ -27,6 +27,21 @@ def test_empirical_null_recovers_a_shifted_wide_null():
     assert census_summary.tail_p(np.array([np.nan]), fit)[0] == 1.0
 
 
+def test_event_share_counts_the_excess_of_small_p_values():
+    rng = np.random.default_rng(4)
+    p = np.r_[rng.uniform(0, 1, 900), rng.uniform(0, 0.002, 100)]     # 10% event days
+    es = census_summary.event_share(p, n_boot=200)
+    # the excess at p <= 0.01 recovers the strong events sharply (100 events, ~9 null days
+    # below 0.01 against 10 expected)
+    assert 90 <= es["excess_p01"] <= 110 and es["excess_p01_lo"] <= 100 <= es["excess_p01_hi"]
+    # Storey's estimate of all event days is unbiased but noisy at this size (sd ~30 days)
+    assert es["n_events_storey_lo"] <= 100 <= es["n_events_storey_hi"]
+    null = census_summary.event_share(rng.uniform(0, 1, 1000), n_boot=200)
+    assert abs(null["excess_p01"]) < 10
+    q = census_summary.q_values(p, es["pi0"])
+    assert (q[-100:] < 0.05).mean() > 0.9 and (q[:900] < 0.05).mean() < 0.01
+
+
 def test_benjamini_hochberg_known_case():
     # n = 8, q = 0.05: step-up thresholds 0.00625, 0.0125, 0.01875, ... ; only the two
     # smallest p (0.001 <= 0.00625, 0.008 <= 0.0125) pass, and no larger k does
