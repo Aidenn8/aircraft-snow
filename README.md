@@ -1,3 +1,69 @@
 # aircraft-snow
 
-A census of snowfall caused by aircraft near US airports, from open radar and flight-tracking data.
+When an airliner climbs or descends through a cloud of supercooled droplets, air cooling
+over its wings and propellers can freeze some of them. The ice grows, falls out as snow and
+drifts with the wind. On weather radar the result is a thin line of snow echo that traces
+the aircraft's path, offset downwind.
+
+The effect has been documented in case studies (hole-punch and canal clouds, single radar
+events near Denver, Helsinki and London). This repository is the first attempt at a census:
+an automated detector that finds these streaks in NEXRAD radar data, matches each one to the
+aircraft that made it using open ADS-B flight tracks, and measures how often it happens, at
+what temperatures, and which aircraft do it, with false-alarm rates measured rather than
+assumed.
+
+*Status: the detector and its calibration are built; the multi-airport census is running.
+Results will be summarised here when it is complete.*
+
+## How it works
+
+1. **Flights** (`snow/adsb.py`, `snow/flights.py`): every aircraft position over North
+   America below 30 000 ft from the open adsb.lol archive (one position per aircraft per
+   10 s), split into flights, identified with the tar1090 aircraft database.
+2. **Radar** (`snow/radar.py`, `snow/event.py`): NEXRAD Level III lowest-tilt reflectivity
+   from AWS, resampled to a 500 m grid around the radar. Aircraft echoes are removed where
+   the beam saw each aircraft.
+3. **Wind** (`snow/hrrr.py`, `snow/epoch.py`): hourly HRRR analysis profiles; the drift of
+   seeded air is the mean wind between the radar beam and the aircraft's level.
+4. **Streaks** (`snow/streaks.py`): thin, long echo objects found by morphology alone, with
+   fixed clutter removed.
+5. **Matching** (`snow/match.py`): each streak is compared with every flight that passed
+   10-50 minutes earlier, its track carried by the wind. A match needs the streak to lie along
+   the drifted track (coverage and precision), and the air to have been echo-free before the
+   aircraft arrived. Chance is measured by repeating everything with all flights rotated about
+   the radar.
+6. **Day test** (`snow/match.py: day_statistic`): the evidence from all matched flights of a
+   radar-day, against the same statistic for every rotated flight set.
+7. **Calibration**: synthetic streaks injected into real radar data (`snow/inject.py`,
+   `scripts/injection_recovery.py`) measure recall; warm-season days where seeding is
+   impossible, rotation placebos and a time-reversed test measure false alarms.
+
+An independent second test (`snow/event.py`) follows every track point's air parcel and
+compares the change in reflectivity on the track with lines beside it, against the same
+rotated placebos.
+
+See `docs/background.md` for the science and prior work and `docs/methods.md` for the method
+and the lessons learned building it.
+
+## Running it
+
+```bash
+python -m venv .venv && .venv/bin/pip install -e '.[test]'
+.venv/bin/python scripts/fetch_reference.py          # aircraft database
+.venv/bin/python scripts/build_sites.py              # airports and radars
+.venv/bin/python -m snow.adsb 2025-01-25:2025-01-26  # ADS-B days (~25-60 s each)
+.venv/bin/python scripts/run_days.py KFTG 2025-01-25 2025-01-25
+.venv/bin/python scripts/review_day.py KFTG 2025-01-25
+.venv/bin/python -m pytest
+```
+
+Long runs on a laptop without a fan go through `tools/thermal/guarded_run.py`, which pauses
+the job when the machine gets hot (start `tools/thermal/daemon.sh` first).
+
+## Data and licences
+
+- ADS-B: [adsb.lol](https://www.adsb.lol/) historical data, Open Database License (ODbL).
+- Radar: NOAA NEXRAD Level II/III via the AWS Open Data program (Unidata buckets).
+- Weather model: NOAA HRRR, University of Utah HRRR-Zarr archive on AWS.
+- Aircraft types: [tar1090-db](https://github.com/wiedehopf/tar1090-db).
+- Surface observations: Iowa Environmental Mesonet.

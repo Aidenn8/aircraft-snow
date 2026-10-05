@@ -72,7 +72,7 @@ def _candidates(sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None):
     # conservative prefilter: no perturbation moves a point by more than max|d| * sqrt(2) * age
     bx = x + drift[:, 0] * age
     by = y + drift[:, 1] * age
-    reach = max(abs(p) for p in DRIFT_PERTURB_MS) * np.sqrt(2) * age
+    reach = max(abs(p) for p in DRIFT_PERTURB_MS) * np.sqrt(2) * np.abs(age)
     pre = (bx > lo_x - reach) & (bx < hi_x + reach) & (by > lo_y - reach) & (by < hi_y + reach)
     if not pre.any():
         return []
@@ -134,24 +134,34 @@ def newness(grids, sx, sy, T, t_pass, u, v):
     return float(np.mean(allv < QUIET_DBZ)), len(sel)
 
 
-def best_new_match(grids, sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None):
-    """Best candidate flight that also passes the newness test: (F1, flight, du, dv, t_pass,
-    quiet fraction, coverage, precision), or zeros if none."""
+def best_new_match(grids, sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None,
+                   require_new=True):
+    """Best candidate flight that also passes the newness test (unless require_new is
+    False): (F1, flight, du, dv, t_pass, quiet fraction, coverage, precision), or zeros."""
     for f1, f, du, dv, t_pass, u, v, cov, prec in _candidates(sx, sy, x, y, t, T, drift, flight, rot, tree):
+        if not require_new:
+            return f1, f, du, dv, t_pass, np.nan, cov, prec
         q, n = newness(grids, sx, sy, T, t_pass, u, v)
         if n >= NEW_MIN_SCANS and q >= NEW_MIN_QUIET:
             return f1, f, du, dv, t_pass, q, cov, prec
     return 0.0, -1, np.nan, np.nan, np.nan, np.nan, 0.0, 0.0
 
 
+def age_window(reverse: bool = False):
+    """Ages (scan time minus passage time) of candidate points. Reverse: aircraft that will
+    pass AGE_MIN-AGE_MAX after the scan (a diagnostic; they cannot have made the echo)."""
+    return (-AGE_MAX_S, -AGE_MIN_S) if reverse else (AGE_MIN_S, AGE_MAX_S)
+
+
 def matched_points(sx, sy, points: pd.DataFrame, drift: np.ndarray, T: float, flight: int,
-                   du: float, dv: float) -> pd.DataFrame:
+                   du: float, dv: float, reverse: bool = False) -> pd.DataFrame:
     """The matched flight's (interpolated) points whose drifted position at T lies within
     TOL_M of the streak's skeleton: these are where the aircraft seeded."""
     from scipy.spatial import cKDTree
     f = (points.flight.to_numpy() == flight)
     age = T - points.t.to_numpy(float)
-    m = f & (age >= AGE_MIN_S) & (age <= AGE_MAX_S)
+    a0, a1 = age_window(reverse)
+    m = f & (age >= a0) & (age <= a1)
     p = points[m]
     px = p.x.to_numpy() + (drift[m, 0] + du) * age[m]
     py = p.y.to_numpy() + (drift[m, 1] + dv) * age[m]
@@ -160,13 +170,16 @@ def matched_points(sx, sy, points: pd.DataFrame, drift: np.ndarray, T: float, fl
 
 
 def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
-                  points: pd.DataFrame, drift: np.ndarray, angles=PLACEBO_ANGLES) -> pd.DataFrame:
+                  points: pd.DataFrame, drift: np.ndarray, angles=PLACEBO_ANGLES,
+                  reverse: bool = False) -> pd.DataFrame:
     """For every streak object: the best real flight that passes the newness test, its F1
     score (column `coverage` for compatibility, plus `cov` and `precision`), and the
-    rotation p-value of that score."""
+    rotation p-value of that score. reverse=True runs the time-reversed diagnostic: aircraft
+    passing 10-50 min after the scan, no newness test."""
     from scipy.spatial import cKDTree
     age_all = T - points.t.to_numpy(float)
-    m = (age_all >= AGE_MIN_S) & (age_all <= AGE_MAX_S) & np.isfinite(drift[:, 0])
+    a0, a1 = age_window(reverse)
+    m = (age_all >= a0) & (age_all <= a1) & np.isfinite(drift[:, 0])
     x, y = points.x.to_numpy()[m], points.y.to_numpy()[m]
     t, dr, fl = points.t.to_numpy(float)[m], drift[m], points.flight.to_numpy()[m]
     rows = []
@@ -175,13 +188,15 @@ def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
         if len(sx) < 4:
             continue
         tree = cKDTree(np.c_[sx, sy])
-        f1, f, du, dv, t_pass, q, cov, prec = best_new_match(grids, sx, sy, x, y, t, T, dr, fl, tree=tree)
-        pm = [best_new_match(grids, sx, sy, x, y, t, T, dr, fl, rot=r, tree=tree) for r in angles]
+        f1, f, du, dv, t_pass, q, cov, prec = best_new_match(grids, sx, sy, x, y, t, T, dr, fl, tree=tree,
+                                                             require_new=not reverse)
+        pm = [best_new_match(grids, sx, sy, x, y, t, T, dr, fl, rot=r, tree=tree, require_new=not reverse)
+              for r in angles]
         plac = np.array([m_[0] for m_ in pm])
         plac_flight = np.array([m_[1] for m_ in pm], np.int64)
         alt_med, p_med, n_seed = np.nan, np.nan, 0
         if f >= 0:
-            mp = matched_points(sx, sy, points, drift, T, f, du, dv)
+            mp = matched_points(sx, sy, points, drift, T, f, du, dv, reverse)
             if len(mp):
                 alt_med, p_med, n_seed = float(mp.alt_ft.median()), float(mp.p_hpa.median()), len(mp)
         rows.append({**o.to_dict(), "flight": f, "coverage": f1, "cov": cov, "precision": prec,

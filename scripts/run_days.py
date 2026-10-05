@@ -40,7 +40,8 @@ def main():
             sk = s.get("streaks", {})
             print(f"{a.site} {d}: flights {s['n_flights']:5d} scans {s['n_scans']:3d}  "
                   f"streaks {sk.get('n_streaks', 0):4d} matched {sk.get('n_matched', 0):3d} "
-                  f"E={sk.get('E', 0):6.1f} p_day={sk.get('p_day', 1):.3f}  "
+                  f"E={sk.get('E', 0):6.1f} p_day={sk.get('p_day', 1):.3f} "
+                  f"p_rev={s.get('streaks_reverse', {}).get('p_day', float('nan')):.3f}  "
                   + "  ".join(f"{k}: p={v['p_cluster']:.3f}" for k, v in st.items())
                   + f"  ({s.get('seconds', 0):.0f}s)", flush=True)
         except Exception as e:

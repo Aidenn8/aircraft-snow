@@ -30,6 +30,7 @@ def one(site: str, day: dt.date, force: bool) -> str:
     zp = s["stats"]["z"]["p_cluster"]
     return (f"{site} {day}: flights {s['n_flights']:5d} streaks {sk.get('n_streaks', 0):4d} "
             f"matched {sk.get('n_matched', 0):3d} p_day={sk.get('p_day', 1):.3f} "
+            f"p_rev={s.get('streaks_reverse', {}).get('p_day', float('nan')):.3f} "
             f"(R={sk.get('n_rotations', 0)}) p_event={zp:.3f} ({s['seconds']:.0f}s)")
 
 

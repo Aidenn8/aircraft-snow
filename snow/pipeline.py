@@ -122,16 +122,16 @@ def streak_objects_day(prep: dict):
     return kept, persist, xs, ys
 
 
-def match_day(prep: dict, angles=SCREEN_ANGLES) -> pd.DataFrame:
+def match_day(prep: dict, angles=SCREEN_ANGLES, reverse: bool = False) -> pd.DataFrame:
     """Streak objects in every scan of the day (fixed echoes removed), each matched to its
-    best new flight with rotation placebos."""
+    best new flight with rotation placebos (reverse=True: the time-reversed diagnostic)."""
     G, pts, dr = prep["grids"], prep["points_dense"], prep["drift_dense"]
     # slow points (helicopters, hovering, slow general aviation: < 80 kt) are excluded: their
     # tracks loop over small areas, so their drifted "lines" are blobs that fit any echo
     fast = ~((pts.gs.to_numpy() >= 0) & (pts.gs.to_numpy() < MIN_MATCH_GS_KT * 10))
     pts, dr = pts[fast].reset_index(drop=True), dr[fast]
     kept, _, xs, ys = streak_objects_day(prep)
-    rows = [match.match_streaks(G, G.t[k], lab, obj, xs, ys, pts, dr, angles=angles)
+    rows = [match.match_streaks(G, G.t[k], lab, obj, xs, ys, pts, dr, angles=angles, reverse=reverse)
             for k, obj, lab in kept]
     rows = [r for r in rows if not r.empty]
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
@@ -216,6 +216,10 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
         summary["streaks"]["n_rotations"] = len(CONFIRM_ANGLES)
         if not streak_table.empty:
             summary["streaks"]["fdr"] = match.empirical_fdr(streak_table).to_dict(orient="records")
+    # time-reversed diagnostic: aircraft that pass 10-50 min AFTER each scan cannot have made
+    # its echoes; their excess over rotations measures alignment with traffic corridors
+    # that is not caused by seeding
+    summary["streaks_reverse"] = match.day_statistic(match_day(prep, SCREEN_ANGLES, reverse=True))
     if save and not streak_table.empty:
         out_dir.mkdir(parents=True, exist_ok=True)
         st = streak_table.copy()
