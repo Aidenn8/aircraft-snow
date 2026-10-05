@@ -30,7 +30,7 @@ def apply():
     mpl.rcParams.update({
         "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
         "axes.edgecolor": AXIS, "axes.labelcolor": INK_2, "axes.titlecolor": INK,
-        "axes.titlesize": 11, "axes.titleweight": "semibold", "axes.titlelocation": "left",
+        "axes.titlesize": 11, "axes.titleweight": "bold", "axes.titlelocation": "left",
         "axes.labelsize": 9.5, "axes.linewidth": 0.8, "axes.grid": True,
         "axes.spines.top": False, "axes.spines.right": False, "axes.prop_cycle": mpl.cycler(color=SERIES),
         "grid.color": GRID, "grid.linewidth": 0.6, "grid.linestyle": "-",
