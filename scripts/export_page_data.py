@@ -68,8 +68,10 @@ def main():
     ev = ROOT / "data" / "events" / a.site
     s = json.loads((ev / f"{a.day}.json").read_text())
     desc = pd.read_csv(ev / f"{a.day}_described.csv")
-    best = desc.sort_values("p_value").drop_duplicates("flight").sort_values("time_utc")
-    best["pass_utc"] = (pd.to_datetime(best.time_utc) - pd.to_timedelta(best.age_min, unit="min")).dt.strftime("%H:%M")
+    best = desc.sort_values("p_value").drop_duplicates("flight").copy()
+    passed = pd.to_datetime(best.time_utc) - pd.to_timedelta(best.age_min, unit="min")
+    best = best.assign(_passed=passed).sort_values("_passed")          # in the order they flew
+    best["pass_utc"] = best._passed.dt.strftime("%H:%M")
     best["scan_utc"] = pd.to_datetime(best.time_utc).dt.strftime("%H:%M")
     fdr = {f["threshold"]: f for f in s["streaks"].get("fdr", [])}
     out = {

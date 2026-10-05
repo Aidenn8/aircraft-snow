@@ -3,8 +3,9 @@
 usage: seeding_efficiency.py SITE YYYY-MM-DD [--alpha 0.01] [--layer-ft 1000] [--pad-min 60]
 
 On an event day, the seeding layer and period are taken from the confident matches
-(p <= alpha): altitudes within --layer-ft of the matched seeding altitudes, passage times
-from --pad-min before the first to --pad-min after the last match. Every flight with a
+(p <= alpha), robustly to stray matches: altitudes from --layer-ft below the lower to
+--layer-ft above the upper quartile of the matched seeding altitudes, passage times from
+--pad-min before the 10th to --pad-min after the 90th percentile. Every flight with a
 track segment in that layer and period is "exposed". For each exposed flight, and only
 where its air was echo-free before it arrived (first passage), the question is whether a
 streak object later lay along its drifted track: the best single-flight F1 against all
@@ -42,10 +43,12 @@ def main():
     desc = pd.read_csv(ev / f"{day}_described.csv")
     if conf.empty or desc.empty:
         raise SystemExit("no confident matches")
-    alt_lo = desc.seed_alt_ft.min() - a.layer_ft
-    alt_hi = desc.seed_alt_ft.max() + a.layer_ft
-    t_lo = conf.t_pass.min() - a.pad_min * 60
-    t_hi = conf.t_pass.max() + a.pad_min * 60
+    # robust to a stray match: the interquartile range of the seeding altitudes and the
+    # 10th-90th percentile of the passage times (some matches are expected to be chance)
+    q25, q75 = desc.seed_alt_ft.quantile([0.25, 0.75])
+    alt_lo, alt_hi = q25 - a.layer_ft, q75 + a.layer_ft
+    t10, t90 = conf.t_pass.quantile([0.1, 0.9])
+    t_lo, t_hi = t10 - a.pad_min * 60, t90 + a.pad_min * 60
     prep = pipeline.prepare(a.site, day)
     G = prep["grids"]
     pts, dr = pipeline.matching_points(prep)

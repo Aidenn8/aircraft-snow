@@ -144,10 +144,11 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
 
   <section aria-labelledby="h-aircraft">
     <div class="eyebrow">The aircraft</div>
-    <h2 id="h-aircraft">Ten flights, each matched to the streak it left</h2>
-    <p class="lede">Every one was an airliner or business jet, nine of them landing. They crossed the
-      cloud at about 3 km, in air at &minus;15 to &minus;18&nbsp;&deg;C, and their snow showed up on the
-      radar a quarter of an hour to three quarters of an hour later.</p>
+    <h2 id="h-aircraft">Sixteen flights matched to streaks, about twelve more than chance</h2>
+    <p class="lede">Most were airliners on the arrival pattern, and most crossed the cloud at about
+      3 km, in air at &minus;16 to &minus;18&nbsp;&deg;C; their snow showed up on the radar 15 to 50
+      minutes later. Rotated copies of the day's flights produce about
+      four such matches, so a few of these are probably chance; which ones cannot be told apart.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col">Flight</th><th scope="col">Type</th><th scope="col">Phase</th>
@@ -159,7 +160,9 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
     </div>
     <p class="note">Altitude is pressure altitude. Fall speed is the height the ice had to fall to
       reach the radar beam divided by the delay; snow crystals and flakes fall at 0.3&ndash;1.5 m/s.
-      Snowfall is water equivalent from the reflectivity, uncertain by a factor of a few.</p>
+      Snowfall is water equivalent from the reflectivity, uncertain by a factor of a few. Two rows
+      look physically odd (an airliner seeding at 20&nbsp;000 ft; one only 500 m above the beam) and
+      are likely among the chance matches.</p>
   </section>
 
   <section aria-labelledby="h-evidence">
@@ -195,11 +198,11 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
 
   <section aria-labelledby="h-physics">
     <div class="eyebrow">The physics</div>
-    <h2 id="h-physics">A streak lives about an hour, and colder air makes more of them</h2>
+    <h2 id="h-physics">A streak lives about an hour, and about one jet in eight made one</h2>
     <div class="two-col">
       <figure class="chart" style="margin:0">
         <div id="chart-lifecycle"></div>
-        <div class="chart-legend"><span><i class="sw band"></i>90% range over the ten flights</span></div>
+        <div class="chart-legend"><span><i class="sw band"></i>90% range over the matched flights</span></div>
         <figcaption class="note">Radar echo on each matched flight's wind-carried track, minus the
           echo 5&ndash;8 km to either side, followed through every scan. Between 10 and 50 minutes the
           curve partly reflects how flights were chosen; its rise before and fall after do not.</figcaption>
@@ -208,8 +211,9 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
         <div id="chart-efficiency"></div>
         <div class="chart-legend"><span><i class="sw fill"></i>jets that left a streak</span>
           <span><i class="sw ring"></i>same jets rotated (chance)</span></div>
-        <figcaption class="note">Jets entering clear air in the cloud layer that afternoon and evening.
-          Warmer bins include flights below the cloud base, so this shows the trend, not a threshold.</figcaption>
+        <figcaption class="note">Jets entering clear air in the cloud layer (8&nbsp;650&ndash;11&nbsp;800 ft,
+          21:20&ndash;04:40 UTC). About one in eight left a streak, eight to ten times the chance rate. Colder
+          air did slightly better, but by less than the uncertainty in each bin.</figcaption>
       </figure>
     </div>
   </section>
