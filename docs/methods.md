@@ -130,6 +130,12 @@ scored the same way as a check, and their false-alarm rate is also used to recom
 excess. Counting evidence once per place (10 km cells) instead of once per flight changed
 little on the days tested and is kept as a sensitivity.
 
+Warm-season null (final method): 80 radar-days, every third day of July 2025 at the eight
+Phase A radars, tracks below 13 000 ft at points the HRRR puts above freezing. Scored the
+same way, 1 day had a calibrated p <= 0.01 (0.8 expected) and 2 had p <= 0.05 (4.0
+expected): the false-alarm rate is as stated. (The uncalibrated rank p-value gave 1 and 3 on
+the same days: roughly honest overall, but unable to tell a sparse day from Denver.)
+
 Denver, 25-26 January 2025 (analysis day from 12 UTC, final method with the echo mask,
 exclusion zone and floored p-values): 685 streak objects, 65 matched to a flight; E = 78.7
 against a null median of 34; no rotation of 200 reached it (rank p = 1/201, gamma tail
