@@ -12,8 +12,9 @@ aircraft that made it using open ADS-B flight tracks, and measures how often it 
 what temperatures, and which aircraft do it, with false-alarm rates measured rather than
 assumed.
 
-*Status: the detector is built and validated on the Denver case of 25 January 2025 (10 jets
-matched to their streaks, 0.6 expected by chance; see `REPORT.md`). The census of eight
+*Status: the detector is built and validated on the Denver case of 25 January 2025 (the
+day's flights beat all 200 rotated copies; 16 flights matched streaks along their
+wind-carried tracks against 3.6 expected by chance; see `REPORT.md`). The census of eight
 radars over the winters 2023-24 to 2025-26 and its warm-season false-alarm calibration are
 running; results will be summarised here when they are complete.*
 
