@@ -6,13 +6,14 @@ usage: census_summary.py [--events data/events] [--out data/census]
 
 The day's p-value. Each radar-day's evidence E (its flights' streak matches) is compared
 with E for the flights rotated about the radar (snow/match.py: every set scored against
-sets at least 20 deg away, p-values floored at the coarsest resolution). The p-value is the
-gamma-tail estimate from the 200-rotation run where the day was confirmed, else from the
-24-rotation screen; with too few positive null scores for a gamma fit, the rank p-value.
-These are valid under the rotation null (checked by simulation and on warm null days),
-but a day has only some 15-25 independent rotations, so p-values far below ~0.001 rest on
-the gamma extrapolation, and naming individual days at a census-wide false discovery rate
-needs more than that across hundreds of days.
+sets at least 20 deg away, p-values floored at the coarsest resolution). The day's p-value
+is the rank p-value of its final run: 200 rotations where the day was confirmed (every day
+that screens at rank p <= 0.05 or gamma p <= 0.1 is), else the 24-rotation screen. It is
+valid under the rotation null (checked by simulation and on warm null days). The gamma-tail
+estimate is kept as a column (p_gamma) but not used: on sparse days, where most rotations
+score zero, it is fitted to a handful of values and can be far too small. With some 15-25
+independent rotations a day, nothing far below ~0.005 can be resolved, and naming single
+days at a census-wide false discovery rate needs more than that across hundreds of days.
 
 So the census answers two questions. (1) How many days had aircraft snow? Under no
 seeding the day p-values are uniform, so the days at or below p = 0.01 (or 0.05) beyond the
@@ -64,7 +65,7 @@ def radar_days(ev_root: pathlib.Path) -> pd.DataFrame:
                       "p_screen": sc.get("p_day", 1.0), "confirmed": confirmed,
                       "E": sk.get("E", 0.0), "n_rotations": sk.get("n_rotations", 0),
                       "p_rank": p_rank,
-                      "p_day": float(p_gamma) if np.isfinite(p_gamma) else float(p_rank),
+                      "p_day": float(p_rank), "p_gamma": float(p_gamma),
                       "p_rev": rv.get("p_day", np.nan),
                       "max_temp_c": s.get("max_temp_c"), "seconds": s.get("seconds")})
             fdr = {f["threshold"]: f for f in sk.get("fdr", [])}
