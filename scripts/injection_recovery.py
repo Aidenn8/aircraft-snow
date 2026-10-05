@@ -3,12 +3,17 @@
 usage: injection_recovery.py SITE DAY [DAY ...] [--n N] [--peaks 5,10,15,20] [--seed S]
 
 For each trial a fall speed is drawn from V_FALL (narrower than the detector's allowed
-range, so the test does not assume what it checks), then a real flight at random from
-those with at least MIN_DENSE interpolated track points that could physically seed: between
-6000 and 14000 ft, 10-60 km from the radar, HRRR temperature at or below the detector's
-seeding limit, and high enough above the beam that their ice reaches it 10-50 min later at
-that fall speed. A streak (snow.inject, physical timing) is added along those points' drifted
-track, with peak reflectivity from --peaks. The streak detector and single-flight matcher
+range, so the test does not assume what it checks) and a supercooled layer thickness from
+LAYER_M. A real flight is drawn at random from those with track points that could
+physically seed: between 6000 and 14000 ft, 10-60 km from the radar, HRRR temperature at or
+below the detector's seeding limit, and high enough above the beam that their ice reaches it
+10-50 min later at that fall speed. The layer is centred on the height above the beam of one
+of the flight's points, chosen at random, and only the flight's points inside it seed; the
+trial needs at least MIN_DENSE of them (10 km of track), otherwise another flight is drawn.
+A flight crossing the layer level leaves a long streak, one descending through it a short
+one, as in nature. A streak (snow.inject, physical timing) is added along the seeding
+points' drifted track, with peak reflectivity from --peaks and a width when it appears drawn from WIDTH_M
+(the widths of the detected Denver streaks; so this is recall for streaks shaped like those). The streak detector and single-flight matcher
 (with rotation placebos) are then run on the scans 10-60 min after the flight's passage. A
 trial is recovered when some streak object overlapping the injected streak's footprint is
 matched with p <= ALPHA. Results go to data/injection/SITE_DAYS_sSEED.parquet.
@@ -28,6 +33,9 @@ ALPHA = 0.05
 MIN_DENSE = 40                      # 10 km of interpolated track
 BAND = (6000.0, 14000.0)
 V_FALL = (0.4, 1.2)                 # m/s, drawn uniformly per trial
+LAYER_M = (300.0, 800.0)            # supercooled layer depth, drawn uniformly per trial
+WIDTH_M = (1500.0, 3000.0)          # streak width above 3 dBZ when it appears (Denver: 1.8-3.1 km)
+MAX_DRAWS = 50
 
 
 def run_trials(site, day, n, peaks, rng):
@@ -42,20 +50,32 @@ def run_trials(site, day, n, peaks, rng):
               & (pts.t > t0 + 1800) & (pts.t < t0 + 86400 - 5400)
               & (pts.temp_c <= match.T_SEED_MAX_C) & (pts.dh > 0)]
     rows = []
+    dh_all = sel.dh.to_numpy()
+    fl_all = sel.flight.to_numpy()
     for trial in range(n):
         v = float(rng.uniform(*V_FALL))
-        arrival = sel.dh.to_numpy() / v
+        depth = float(rng.uniform(*LAYER_M))
+        arrival = dh_all / v
         ok = (arrival >= match.AGE_MIN_S) & (arrival <= match.AGE_MAX_S)
-        counts = sel[ok].groupby("flight").size()
+        counts = pd.Series(fl_all[ok]).value_counts()
         candidates = counts[counts >= MIN_DENSE].index.to_numpy()
-        if len(candidates) == 0:
+        fp = None
+        for _ in range(MAX_DRAWS if len(candidates) else 0):
+            f = rng.choice(candidates)
+            mine = np.nonzero(ok & (fl_all == f))[0]
+            centre = dh_all[rng.choice(mine)]
+            layer = mine[np.abs(dh_all[mine] - centre) <= depth / 2]
+            if len(layer) >= MIN_DENSE:
+                fp = sel.iloc[layer]
+                break
+        if fp is None:
             continue
-        f = rng.choice(candidates)
-        fp = sel[ok & (sel.flight == f).to_numpy()]
         idx = fp.index.to_numpy()
         peak = float(rng.choice(peaks))
+        width = float(rng.uniform(*WIDTH_M))
+        s0 = inject.sigma_for_width(width, peak)
         Gi, err = inject.inject(G, fp.x.to_numpy(), fp.y.to_numpy(), fp.t.to_numpy(float), dr[idx],
-                                peak, rng=rng, dh=fp.dh.to_numpy(), v_fall=v)
+                                peak, rng=rng, dh=fp.dh.to_numpy(), v_fall=v, s0_m=s0)
         arr = fp.dh.to_numpy() / v
         t_pass = float(fp.t.median())
         scans = np.nonzero((Gi.t >= t_pass + 10 * 60) & (Gi.t <= t_pass + 60 * 60))[0]
@@ -89,7 +109,8 @@ def run_trials(site, day, n, peaks, rng):
             if best_p <= ALPHA:
                 break
         rows.append({"site": site, "day": str(day), "trial": trial, "flight": int(f), "peak_dbz": peak,
-                     "n_points": len(fp), "alt_ft": float(fp.alt_ft.median()), "v_fall": v,
+                     "n_points": len(fp), "alt_ft": float(fp.alt_ft.median()), "v_fall": v, "layer_m": depth, "width_m": width,
+                     "alt_range_ft": float(fp.alt_ft.max() - fp.alt_ft.min()),
                      "dh_m": float(fp.dh.median()), "temp_c": float(fp.temp_c.median()),
                      "wind_err_u": err[0], "wind_err_v": err[1], "object_found": found_obj,
                      "best_p": best_p, "best_cov": best_cov, "recovered": best_p <= ALPHA})

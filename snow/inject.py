@@ -18,6 +18,12 @@ mean widths of 1.2-3.5 km (median 2.2 km) at 15-60 min, which for a Gaussian pro
 holes in cloud widen faster, 1-2 m/s, Iwasaki & Fujii 2025, but the snow falling out of
 them stays narrower.)
 
+Width: with s0_m given (physical timing only), the cross-section has sigma s0_m when the
+ice first reaches the beam and widens at SPREAD_MS from then on; sigma_for_width picks s0_m
+so that the streak is a chosen width above the detector's 3 dBZ threshold at its peak
+reflectivity (a Gaussian in linear units is wider above a fixed threshold the brighter it
+is, and the detected Denver streaks were 1.8-3.1 km wide at 13-25 dBZ).
+
 Physical timing (when the point's height above the beam, dh, and a fall speed v are given):
 ice from a point dh metres above the beam centre reaches the beam after a* = dh / v, so
 each point has its own envelope, a triangle peaking at a* with half-width
@@ -60,8 +66,15 @@ def envelope_fall(age, arrival):
     return np.where(np.isfinite(a) & (a > 0) & (age >= GROWTH_S), w, 0.0)
 
 
+def sigma_for_width(width_m: float, peak_dbz: float, threshold_dbz: float = 3.0) -> float:
+    """Gaussian sigma (m) whose cross-section, at peak reflectivity peak_dbz on an empty
+    background, is width_m wide above threshold_dbz (the detector's echo threshold)."""
+    k = 2 * np.log(10 ** (max(peak_dbz - threshold_dbz, 0.5) / 10.0))
+    return width_m / (2 * np.sqrt(k))
+
+
 def inject(grids: Grids, x, y, t, drift, peak_dbz: float, rng=None, wind_err_ms=WIND_ERR_MS,
-           dh=None, v_fall=None):
+           dh=None, v_fall=None, s0_m=None):
     """Return a copy of grids with a streak along the drifted points (x, y, t, drift).
     Also returns the wind error used. With dh (m above the beam, per point) and v_fall
     (m/s), each point's echo follows the physical timing described above."""
@@ -84,7 +97,11 @@ def inject(grids: Grids, x, y, t, drift, peak_dbz: float, rng=None, wind_err_ms=
             continue
         px = x[m] + (drift[m, 0] + err[0]) * age[m]
         py = y[m] + (drift[m, 1] + err[1]) * age[m]
-        s = S0_M + SPREAD_MS * np.maximum(age[m] - (GROWTH_S if physical else ONSET_S), 0)
+        if physical and s0_m is not None:
+            # width s0_m when the ice first reaches the beam, widening slowly afterwards
+            s = s0_m + SPREAD_MS * np.maximum(age[m] - arrival[m], 0)
+        else:
+            s = S0_M + SPREAD_MS * np.maximum(age[m] - (GROWTH_S if physical else ONSET_S), 0)
         add = np.zeros((ny, nx))
         r = 3.0 * s.max()
         for px_i, py_i, s_i, w_i in zip(px, py, s, w[m]):

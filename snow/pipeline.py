@@ -223,10 +223,10 @@ def drop_radar_cache(site: str, day: dt.date):
 
 def run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
             null_alt_max_ft: float | None = None, keep_radar: bool | None = None,
-            event_test: bool = True) -> dict:
+            event_test: bool = True, reverse_all: bool = False) -> dict:
     """Run the tests for one radar-day (see below). Unless keep_radar is True, the day's
     cached radar files are deleted afterwards when no test reaches p <= 0.05."""
-    summary = _run_day(site, day, save, force, null_alt_max_ft, event_test)
+    summary = _run_day(site, day, save, force, null_alt_max_ft, event_test, reverse_all)
     interesting = (summary.get("streaks", {}).get("p_day", 1.0) <= 0.05
                    or summary.get("stats", {}).get(event.PRIMARY, {}).get("p_cluster", 1.0) <= 0.05)
     if keep_radar is False or (keep_radar is None and not interesting):
@@ -235,12 +235,14 @@ def run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
 
 
 def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
-             null_alt_max_ft: float | None = None, event_test: bool = True) -> dict:
+             null_alt_max_ft: float | None = None, event_test: bool = True,
+             reverse_all: bool = False) -> dict:
     """Run the tests for one radar-day. With null_alt_max_ft set (null mode, for
     false-alarm calibration on warm days), only tracks below that altitude are used, the
     screens are skipped and results go to data/events_null/. event_test=False skips the
     parcel-following event test (event.py), which is not calibrated on winter days (see
-    docs/methods.md); the census runs without it."""
+    docs/methods.md); the census runs without it. The time-reversed diagnostic runs on
+    candidate days (those sent to confirmation), or on every day with reverse_all."""
     null = null_alt_max_ft is not None
     out_dir = (OUT.parent / "events_null" if null else OUT) / site
     summ_path = out_dir / f"{day:%Y-%m-%d}.json"
@@ -289,17 +291,19 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
     # the screening result is kept for every day: it is the one statistic computed the same
     # way on all days, so census-level selection uses it (census_summary.py)
     summary["streaks_screen"] = dict(summary["streaks"])
-    if screen_passes(summary["streaks"]):
+    candidate = screen_passes(summary["streaks"])
+    if candidate:
         streak_table = match_day(prep, CONFIRM_ANGLES, max_temp_c=tmax)
         summary["streaks"] = match.day_statistic(streak_table)
         summary["streaks"]["n_rotations"] = len(CONFIRM_ANGLES)
         if not streak_table.empty:
             summary["streaks"]["fdr"] = match.empirical_fdr(streak_table).to_dict(orient="records")
-    # time-reversed diagnostic: aircraft that pass 10-50 min AFTER each scan cannot have made
-    # its echoes; their excess over rotations measures alignment with traffic corridors
-    # that is not caused by seeding
-    summary["streaks_reverse"] = match.day_statistic(match_day(prep, SCREEN_ANGLES, reverse=True,
-                                                               max_temp_c=tmax))
+    # time-reversed diagnostic, on candidate days only (it costs as much as the screen):
+    # aircraft that pass 10-50 min AFTER each scan cannot have made its echoes; their excess
+    # over rotations measures alignment with traffic corridors that is not caused by seeding
+    if candidate or reverse_all:
+        summary["streaks_reverse"] = match.day_statistic(match_day(prep, SCREEN_ANGLES, reverse=True,
+                                                                   max_temp_c=tmax))
     if save and not streak_table.empty:
         out_dir.mkdir(parents=True, exist_ok=True)
         st = streak_table.copy()

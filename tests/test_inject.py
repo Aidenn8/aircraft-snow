@@ -28,6 +28,15 @@ def test_injected_streak_peak_and_position():
     assert abs(col.max() - 20.0) < 0.5                    # peak reflectivity as requested
 
 
+def test_sigma_for_width_gives_the_threshold_width():
+    for peak in (8.0, 15.0, 25.0):
+        s = inject.sigma_for_width(2000.0, peak)
+        d = np.linspace(-5000, 5000, 20001)
+        z = 10 * np.log10(10 ** (peak / 10) * np.exp(-d ** 2 / (2 * s ** 2)))
+        above = d[z >= 3.0]
+        assert abs((above.max() - above.min()) - 2000.0) < 5.0
+
+
 def test_envelope_fall_timing():
     arrival = np.array([1800.0, 1800.0, np.nan, -100.0, 300.0])
     age = np.array([1800.0, 1500.0, 1800.0, 1800.0, 400.0])
