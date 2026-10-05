@@ -109,17 +109,26 @@ precipitation is not uniform. It is therefore not used in the census
    8-16 km in 8 directions keeps orientation exactly; both placebo families are compared on
    the same tracks (within 49 km of the radar, so shifted copies stay in the domain).
 
-Census selection (scripts/census_summary.py). A day's p-value is the gamma-tail estimate
-from its 200-rotation run if it was confirmed (screen rank p <= 0.05 or gamma p <= 0.1),
-else from its 24-rotation screen, else (too few positive null scores for a fit) the rank
-p-value. These are valid under the rotation null, but with some 15-25 independent
-rotations per day nothing far below ~0.001 is resolved, while naming single days at a 5%
-false discovery rate across ~800 tested days would need ~1e-4. So the census estimates how
-many days had aircraft snow from the excess of small day p-values over the uniform
-distribution expected under no seeding (days at p <= 0.01 beyond 1%, with a Poisson
-interval; Storey's pi0 as a noisier estimate of all event days), reports
-Benjamini-Hochberg selections and Storey q-values, and ranks candidate days for
-inspection. The same summary of warm-season null days is the false-alarm check.
+Census selection (scripts/census_summary.py). A day has only some 15-25 independent
+rotations (neighbouring ones match the same streaks), and that limits both obvious
+day-level p-values. The rank of the real E among the rotations cannot say by how much a day
+beats them all: Denver and a sparse day whose real flights match three streaks while the
+rotations match nothing both "beat all 200". And on such sparse days that happens far more
+often than 1 time in 200 under no seeding: on warm null days, Detroit on 7 July 2025 did it
+with four arrivals matched to one rain line along the final approach. A normal tail for z
+is worse still on sparse days. So each day is scored by z = (E - mean) / s.d. against the
+sets it is compared with (s.d. floored at 0.7), every rotation's own z is computed the same
+way, the rotations' z values are pooled over all tested days (by rotation count, and within
+strata of the day's chance-match level), and a real day's p-value is the share of its pool
+at or above its z. Under no seeding the real set is one more rotation, so this is valid; it
+keeps the margin; and its pool runs to tens of thousands of values. (In a simulation with
+the real set drawn like a rotation, on sparse and dense days mixed, it is not
+anti-conservative.) The census then reports the excess of days at small p-values over what
+no seeding gives (the estimated number of event days), Benjamini-Hochberg selections and
+Storey q-values, and a ranked list of candidates, each inspected by eye. Warm null days are
+scored the same way as a check, and their false-alarm rate is also used to recompute the
+excess. Counting evidence once per place (10 km cells) instead of once per flight changed
+little on the days tested and is kept as a sensitivity.
 
 Denver, 25-26 January 2025 (analysis day from 12 UTC, final method with the echo mask,
 exclusion zone and floored p-values): 685 streak objects, 65 matched to a flight; E = 78.7

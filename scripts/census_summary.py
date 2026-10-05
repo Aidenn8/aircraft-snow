@@ -4,38 +4,35 @@ select and rank candidate days.
 usage: census_summary.py [--events data/events] [--out data/census]
                          [--null-events data/events_null] [--q 0.05] [--alpha 0.01] [--top 30]
 
-The day's p-value. Each radar-day's evidence E (its flights' streak matches) is compared
-with E for the flights rotated about the radar (snow/match.py: every set scored against
-sets at least 20 deg away, p-values floored at the coarsest resolution). The day's p-value
-is the rank p-value of its final run: 200 rotations where the day was confirmed (every day
-that screens at rank p <= 0.05 or gamma p <= 0.1 is), else the 24-rotation screen. It is
-valid under the rotation null (checked by simulation and on warm null days). The gamma-tail
-estimate is kept as a column (p_gamma) but not used: on sparse days, where most rotations
-score zero, it is fitted to a handful of values and can be far too small. With some 15-25
-independent rotations a day, nothing far below ~0.005 can be resolved, and naming single
-days at a census-wide false discovery rate needs more than that across hundreds of days.
+The day's evidence. Each radar-day's flights are scored by E, the sum over matched flights
+of -log10 of their streak p-values, and so is every copy of the day's flights rotated about
+the radar, each scored against sets at least 20 deg away (snow/match.py). The day's score is
+z = (E - mean) / s.d. of the sets it is compared with (s.d. floored), which keeps the margin
+by which the real flights beat the rotations.
 
-Because that rotation p-value is not exact on sparse days (a day where the real flights
-match three or four streaks and the rotations almost none beats "all 200" rotations far
-more often than 1 time in 200, since neighbouring rotations are not independent), the
-false-alarm rate at each level is also measured directly on the warm null days, and the
-census excess is reported against that calibrated rate (summary.json, "calibrated").
+The day's p-value. A day has only some 15-25 independent rotations, so neither the rank of
+E among them (which cannot say by how much a day beats them all) nor a normal tail for z
+(far too optimistic on sparse days, where the rotations match almost nothing) is exact.
+Instead every rotation's own z, computed the same way, is pooled over all tested days,
+separately for 24- and 200-rotation runs and within strata of the day's chance-match level,
+and a real day's p-value is the share of its pool at or above its z (self_calibrate). Under
+no seeding the real set is one more rotation, so this is valid, and the pool is large.
 
-So the census answers two questions. (1) How many days had aircraft snow? Under no
-seeding the day p-values are uniform, so the days at or below p = 0.01 (or 0.05) beyond the
-1% (5%) the null predicts are event days: for rare, strong events this excess is the sharp
-estimate. Storey's estimate of all event days, 1 - pi0 with pi0 = #(p > 0.5) / (N / 2), is
-also given, with a bootstrap interval, but it is too noisy to resolve a few per cent. (2) Which days? Benjamini-Hochberg at --q, Storey
-q-values, and a ranked list of the --top candidates for inspection. Warm-season null days
-(--null-events) are summarised the same way: their estimated event share should be ~0.
-A robustness check fits an empirical null (median, IQR; Efron 2004) to the probit of the
-day p-values of days with any evidence (p < 0.99), for both sets of days.
+What is reported. (1) How many days had aircraft snow: the days at or below p = 0.01 (0.05)
+beyond the 1% (5%) expected under no seeding, with an interval; Storey's estimate of all
+event days as a noisier companion. (2) Which days: Benjamini-Hochberg at --q, Storey
+q-values, and the --top candidates for inspection. (3) Checks: warm-season null days
+(--null-events, tracks below 13 000 ft in July, where no aircraft can seed), calibrated the
+same way against their own rotations, should show no excess; the false-alarm rate they show
+at each level is also used to recompute the census excess ("calibrated"); the rank p-value
+(p_rank) and a score counting places instead of flights (p_place) are kept as sensitivities.
 
 Outputs (in --out):
   radar_days.csv    one row per radar-day: screens, scores, p-values, selections, q-values
   event_days.csv    radar-days selected by BH at --q
   candidates.csv    the --top days ranked by p-value
-  summary.json      event-share estimates, selections, null-day check, empirical-null fits
+  null_days.csv     the warm null days, scored the same way
+  summary.json      event-day estimates, selections, null-day check
   catalogue.csv     for selected days, each flight's best streak match with p <= --alpha
 """
 import argparse
