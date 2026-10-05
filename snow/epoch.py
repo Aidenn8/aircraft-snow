@@ -91,6 +91,31 @@ def drift_velocity(points: pd.DataFrame, profiles: pd.DataFrame, radar_height_m:
     return out
 
 
+def height_above_beam(points: pd.DataFrame, profiles: pd.DataFrame, radar_height_m: float,
+                      beam_elev_deg: float, half_width_deg: float = 0.475):
+    """Per point: geometric height above the lowest beam's centre (m), from the HRRR
+    geopotential height at the point's pressure (nearest hourly run; pressure altitude is
+    only ISA height), and the beam's half-width at the point's range (m)."""
+    from .radar import beam_height_ground_range
+    runs = np.array(sorted(profiles.run.unique()))
+    run_s = np.array([pd.Timestamp(r).timestamp() for r in runs])
+    rng = np.hypot(points.x.to_numpy(), points.y.to_numpy())
+    h_beam, _ = beam_height_ground_range(rng, beam_elev_deg, radar_height_m)
+    z = np.full(len(points), np.nan)
+    which = np.abs(points.t.to_numpy(float)[:, None] - run_s[None, :]).argmin(axis=1)
+    lp = np.log(points.p_hpa.to_numpy(float))
+    for k, r in enumerate(runs):
+        m = which == k
+        if not m.any():
+            continue
+        prof = profiles[profiles.run == r]
+        ok = np.isfinite(prof.HGT.to_numpy(float))
+        lpp = np.log(prof.p.to_numpy(float)[ok])
+        order = np.argsort(lpp)
+        z[m] = np.interp(lp[m], lpp[order], prof.HGT.to_numpy(float)[ok][order])
+    return z - h_beam, rng * np.tan(np.radians(half_width_deg))
+
+
 def sample_parcels(points: pd.DataFrame, scans: list[tuple[float, "radar.Sweep"]],
                    drift: np.ndarray, age_min_s: float = -1800, age_max_s: float = 5400,
                    offsets_m=(0.0, CONTROL_OFFSET_M, -CONTROL_OFFSET_M)) -> pd.DataFrame:

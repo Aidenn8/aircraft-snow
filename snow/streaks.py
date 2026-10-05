@@ -15,7 +15,11 @@ streaks (an approach path's downwind, base and final legs make a U) qualify:
 A component is a streak candidate when its main length is at least MIN_LENGTH_M, its mean
 width at most MAX_MEAN_WIDTH_M, its branchiness at most MAX_BRANCHINESS, its main length at
 least MIN_ELONGATION times its mean width, and its area at
-least MIN_AREA_KM2.
+least MIN_AREA_KM2. Objects whose peak reflectivity exceeds MAX_PEAK_DBZ are not candidates:
+aircraft-made snow is light (the Denver streaks peaked at 13-29 dBZ, i.e. about 0.5-2.5
+mm/h of snow), and brighter lines are convective cells, outflow boundaries or heavy bands,
+along which aircraft paths can align for reasons other than seeding (aircraft avoid
+storms; runways and bands both follow the wind).
 """
 from __future__ import annotations
 
@@ -41,6 +45,7 @@ MIN_ELONGATION = 4.0      # main length / mean width (Denver streaks: 10-30 km x
 MIN_AREA_KM2 = 4.0
 MIN_RANGE_M = 8000.0
 SMOOTH_M = 750.0
+MAX_PEAK_DBZ = 35.0
 
 
 @dataclasses.dataclass
@@ -118,10 +123,12 @@ def find_streaks(g: GridScan) -> tuple[pd.DataFrame, np.ndarray]:
         if (L < MIN_LENGTH_M or W > MAX_MEAN_WIDTH_M or L_tot / L > MAX_BRANCHINESS
                 or L / W < MIN_ELONGATION):
             continue
-        keep[rp.label] = True
-        cy, cx = rp.centroid
         sel = lab == rp.label
         zz = g.z[sel]
+        if zz.max() > MAX_PEAK_DBZ:
+            continue
+        keep[rp.label] = True
+        cy, cx = rp.centroid
         rows.append({"t": g.t, "label": rp.label, "x": np.interp(cx, np.arange(len(g.xs)), g.xs),
                      "y": np.interp(cy, np.arange(len(g.ys)), g.ys), "length_m": L,
                      "skeleton_m": L_tot, "width_m": W,

@@ -26,3 +26,14 @@ def test_injected_streak_peak_and_position():
     iy = np.argmax(col)
     assert abs(xs[iy] - y_expect) <= res
     assert abs(col.max() - 20.0) < 0.5                    # peak reflectivity as requested
+
+
+def test_envelope_fall_timing():
+    arrival = np.array([1800.0, 1800.0, np.nan, -100.0, 300.0])
+    age = np.array([1800.0, 1500.0, 1800.0, 1800.0, 400.0])
+    w = inject.envelope_fall(age, arrival)
+    assert w[0] == 1.0                                     # peak when the ice reaches the beam
+    # half-width max(0.3 x 1800 s, 600 s) = 600 s, so 300 s early is half way up
+    assert abs(w[1] - 0.5) < 1e-9
+    assert w[2] == 0 and w[3] == 0                         # never reaches the beam
+    assert w[4] == 0                                       # too young to be visible

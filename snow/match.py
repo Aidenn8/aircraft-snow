@@ -20,6 +20,19 @@ scans. Among flights with coverage and precision >= MIN_COVERAGE the best new on
 F1) is the match. (In a stream of aircraft on one path the streak predates the later
 aircraft, so the match is normally the first one through new cloud.)
 
+Fall speed: ice made at height h above the radar beam (beam centre h_b, half-width w) is
+seen by the beam after falling h - h_b, so a point of age a can only explain echo at the
+beam if its implied fall speed lies in [V_FALL_MIN_MS, V_FALL_MAX_MS]:
+    V_FALL_MIN * a <= (h - h_b) + w   and   (h - h_b) - w <= V_FALL_MAX * a.
+The range spans snow crystals, aggregates and lightly rimed particles (Locatelli & Hobbs
+1974). Points that fail it are not candidates. Rotation about the radar keeps range, height
+and time, so real and rotated flights are filtered alike. (Tables without the height
+columns dh, bw are matched without this filter.)
+
+Temperature: only points where the HRRR analysis is at or below T_SEED_MAX_C are candidates
+(supercooled cloud is needed; the bound is far warmer than any reported seeding threshold,
+so it removes only points that cannot seed). Null-mode runs on warm days switch it off.
+
 Chance: the whole procedure is repeated for placebo flight sets, every flight rotated about
 the radar by an angle in PLACEBO_ANGLES (same ranges, shapes, timing and wind, wrong place).
 The p-value is (1 + number of rotations whose best new F1 >= the real one) /
@@ -48,6 +61,31 @@ NEW_WINDOW_S = (-30 * 60, -3 * 60)
 QUIET_DBZ = 0.0
 NEW_MIN_QUIET = 0.7
 NEW_MIN_SCANS = 2
+V_FALL_MIN_MS = 0.2
+V_FALL_MAX_MS = 2.0
+BEAM_HALF_WIDTH_DEG = 0.475       # half the 0.95 deg half-power beamwidth
+T_SEED_MAX_C = -4.0
+
+
+def fall_ok(dh, bw, age):
+    """Whether ice made dh metres above the beam centre (beam half-width bw) can be at the
+    beam after |age| seconds, for a fall speed in [V_FALL_MIN_MS, V_FALL_MAX_MS]. The
+    absolute age keeps the time-reversed diagnostic a mirror image of the forward test."""
+    a = np.abs(np.asarray(age, float))
+    dh = np.asarray(dh, float)
+    bw = np.asarray(bw, float)
+    return (dh + bw >= V_FALL_MIN_MS * a) & (dh - bw <= V_FALL_MAX_MS * a)
+
+
+def _physical_mask(points: pd.DataFrame, age: np.ndarray, max_temp_c=T_SEED_MAX_C) -> np.ndarray:
+    """Points that could have made echo seen at the beam at this age: fall speed in range,
+    and (unless max_temp_c is None) cold enough for supercooled cloud."""
+    m = np.ones(len(points), bool)
+    if "dh" in points and "bw" in points:
+        m &= fall_ok(points.dh.to_numpy(float), points.bw.to_numpy(float), age)
+    if max_temp_c is not None and "temp_c" in points:
+        m &= points.temp_c.to_numpy(float) <= max_temp_c
+    return m
 
 
 def skeleton_xy(label_img: np.ndarray, label: int, xs: np.ndarray, ys: np.ndarray):
@@ -100,8 +138,9 @@ def _candidates(sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None):
         uf, fi = np.unique(fl, return_inverse=True)
         n_near = np.bincount(fi, minlength=len(uf))
         n_hit = np.bincount(fi[hit], minlength=len(uf))
-        pairs = np.unique(fi[hit] * n_sk + nearest[hit])
-        n_cov = np.bincount(pairs // n_sk, minlength=len(uf))
+        covered = np.zeros(len(uf) * n_sk, bool)          # (flight, skeleton pixel) pairs
+        covered[fi[hit] * n_sk + nearest[hit]] = True
+        n_cov = covered.reshape(len(uf), n_sk).sum(axis=1)
         prec_all = n_hit / np.maximum(n_near, 1)
         cov_all = n_cov / n_sk
         for j in np.nonzero((prec_all >= MIN_COVERAGE) & (cov_all >= MIN_COVERAGE))[0]:
@@ -154,14 +193,14 @@ def age_window(reverse: bool = False):
 
 
 def matched_points(sx, sy, points: pd.DataFrame, drift: np.ndarray, T: float, flight: int,
-                   du: float, dv: float, reverse: bool = False) -> pd.DataFrame:
+                   du: float, dv: float, reverse: bool = False, max_temp_c=T_SEED_MAX_C) -> pd.DataFrame:
     """The matched flight's (interpolated) points whose drifted position at T lies within
     TOL_M of the streak's skeleton: these are where the aircraft seeded."""
     from scipy.spatial import cKDTree
     f = (points.flight.to_numpy() == flight)
     age = T - points.t.to_numpy(float)
     a0, a1 = age_window(reverse)
-    m = f & (age >= a0) & (age <= a1)
+    m = f & (age >= a0) & (age <= a1) & _physical_mask(points, age, max_temp_c)
     p = points[m]
     px = p.x.to_numpy() + (drift[m, 0] + du) * age[m]
     py = p.y.to_numpy() + (drift[m, 1] + dv) * age[m]
@@ -171,7 +210,7 @@ def matched_points(sx, sy, points: pd.DataFrame, drift: np.ndarray, T: float, fl
 
 def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
                   points: pd.DataFrame, drift: np.ndarray, angles=PLACEBO_ANGLES,
-                  reverse: bool = False) -> pd.DataFrame:
+                  reverse: bool = False, max_temp_c=T_SEED_MAX_C) -> pd.DataFrame:
     """For every streak object: the best real flight that passes the newness test, its F1
     score (column `coverage` for compatibility, plus `cov` and `precision`), and the
     rotation p-value of that score. reverse=True runs the time-reversed diagnostic: aircraft
@@ -179,7 +218,8 @@ def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
     from scipy.spatial import cKDTree
     age_all = T - points.t.to_numpy(float)
     a0, a1 = age_window(reverse)
-    m = (age_all >= a0) & (age_all <= a1) & np.isfinite(drift[:, 0])
+    m = ((age_all >= a0) & (age_all <= a1) & np.isfinite(drift[:, 0])
+         & _physical_mask(points, age_all, max_temp_c))
     x, y = points.x.to_numpy()[m], points.y.to_numpy()[m]
     t, dr, fl = points.t.to_numpy(float)[m], drift[m], points.flight.to_numpy()[m]
     rows = []
@@ -194,13 +234,16 @@ def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
               for r in angles]
         plac = np.array([m_[0] for m_ in pm])
         plac_flight = np.array([m_[1] for m_ in pm], np.int64)
-        alt_med, p_med, n_seed = np.nan, np.nan, 0
+        alt_med, p_med, n_seed, v_fall = np.nan, np.nan, 0, np.nan
         if f >= 0:
-            mp = matched_points(sx, sy, points, drift, T, f, du, dv, reverse)
+            mp = matched_points(sx, sy, points, drift, T, f, du, dv, reverse, max_temp_c)
             if len(mp):
                 alt_med, p_med, n_seed = float(mp.alt_ft.median()), float(mp.p_hpa.median()), len(mp)
+                if "dh" in mp:
+                    v_fall = float(np.median(mp.dh.to_numpy(float) / np.abs(T - mp.t.to_numpy(float))))
         rows.append({**o.to_dict(), "flight": f, "coverage": f1, "cov": cov, "precision": prec,
                      "seed_alt_ft": alt_med, "seed_p_hpa": p_med, "n_seed_points": n_seed,
+                     "v_fall": v_fall,
                      "du": du, "dv": dv, "t_pass": t_pass, "age_s": T - t_pass if f >= 0 else np.nan,
                      "quiet_before": q, "placebo_mean": float(plac.mean()),
                      "placebo_q95": float(np.quantile(plac, 0.95)),

@@ -107,3 +107,51 @@ def test_newness_quiet_and_echo():
     g.z[:] = 10.0
     q, n = match.newness(g, sx, sy, T=1200.0, t_pass=1000.0, u=0.0, v=0.0)
     assert q == 0.0                              # echo already present
+
+
+def test_fall_ok_bounds():
+    age = 30 * 60.0
+    bw = 200.0
+    assert match.fall_ok(1000.0, bw, age)                    # 0.56 m/s: snow
+    assert not match.fall_ok(0.0, 0.0, age)                  # at the beam: falls out at once
+    assert not match.fall_ok(-500.0, bw, age)                # below the beam
+    assert not match.fall_ok(5000.0, bw, age)                # 2.8 m/s: faster than snow
+    assert match.fall_ok(1000.0, bw, -age)                   # reversed diagnostic uses |age|
+    # the beam width widens the window
+    lo = match.V_FALL_MIN_MS * age
+    assert match.fall_ok(lo - bw + 1, bw, age) and not match.fall_ok(lo - bw - 1, bw, age)
+
+
+def _one_streak_case(dh, temp_c):
+    """A 15 km streak at y = 0 in a quiet grid, and one flight along it ~25-30 min earlier."""
+    from snow import event
+    res = 500.0
+    xs = np.arange(-30e3, 30e3 + res / 2, res)
+    times = np.arange(0.0, 3601.0, 300.0)
+    z = np.full((len(times), len(xs), len(xs)), -10.0, np.float32)
+    lab = np.zeros((len(xs), len(xs)), np.int32)
+    iy = int(np.argmin(np.abs(xs)))
+    ix = (xs >= 5e3) & (xs <= 20e3)
+    lab[iy, ix] = 1
+    z[-1][lab == 1] = 15.0
+    g = event.Grids(times, z, float(xs[0]), float(xs[0]), res)
+    objects = pd.DataFrame({"label": [1]})
+    tx = np.arange(0.0, 25e3, 250.0)
+    pts = pd.DataFrame({"flight": 7, "x": tx, "y": 0.0, "t": 1800.0 + tx / 200.0,
+                        "alt_ft": 10000.0, "p_hpa": 700.0, "dh": dh, "bw": 200.0, "temp_c": temp_c})
+    drift = np.zeros((len(pts), 2))
+    return g, lab, objects, xs, pts, drift
+
+
+def test_match_streaks_physical_requirements():
+    T = 3600.0
+    angles = (90.0, 180.0, 270.0)
+    for dh, temp, tmax, expect in ((1000.0, -15.0, match.T_SEED_MAX_C, True),   # snow-like fall
+                                   (0.0, -15.0, match.T_SEED_MAX_C, False),     # no fall: impossible
+                                   (1000.0, 2.0, match.T_SEED_MAX_C, False),    # above freezing
+                                   (1000.0, 2.0, None, True)):                  # null mode: no T test
+        g, lab, objects, xs, pts, drift = _one_streak_case(dh, temp)
+        r = match.match_streaks(g, T, lab, objects, xs, xs, pts, drift, angles=angles, max_temp_c=tmax)
+        assert (r.flight.iloc[0] == 7) == expect, (dh, temp, tmax)
+        if expect:
+            assert abs(r.v_fall.iloc[0] - dh / (T - r.t_pass.iloc[0])) < 0.2

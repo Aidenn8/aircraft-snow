@@ -76,13 +76,18 @@ def prepare(site: str, day: dt.date, scans=None, alt_max_ft: float | None = None
     runs = [t0.replace(tzinfo=None) + dt.timedelta(hours=k) for k in range(-1, 26)]
     profs = pd.concat([hrrr.profile(r, lat0, lon0, box=HRRR_BOX) for r in runs], ignore_index=True)
     drift = epoch.drift_velocity(pts, profs, sw0.radar_height, sw0.elevation)
+    # height above the beam and beam half-width, for the fall-speed test in match.py
+    pts["dh"], pts["bw"] = epoch.height_above_beam(pts, profs, sw0.radar_height, sw0.elevation,
+                                                   match.BEAM_HALF_WIDTH_DEG)
+    # HRRR temperature at each point (time- and log-pressure-interpolated)
+    pts["temp_c"] = flights.interp_profile_to_points(pts, profs, fields=("temp",))["temp"].to_numpy()
     # every aircraft at any altitude (including ones on the ground) is masked out of the radar
     allpos = flights.load_window(lat0, lon0, MAX_RANGE_M / 1000 + 15, t0 - dt.timedelta(hours=1),
                                  t1 + dt.timedelta(hours=1.5), max_alt_ft=60_000, site=site)
     grids = event.Grids.from_sweeps(scans, aircraft=allpos[["hex", "t", "x", "y", "gs"]])
     # tracks interpolated to 250 m spacing for streak matching; each interpolated point
     # inherits the drift of the reported position it starts from
-    dense = flights.densify(pts)
+    dense = flights.densify(pts, columns=("x", "y", "t", "alt_ft", "p_hpa", "gs", "dh", "bw", "temp_c"))
     drift_dense = drift[dense.src.to_numpy()]
     return {"grids": grids, "points": pts, "drift": drift, "profiles": profs, "sweep0": sw0,
             "positions": pos, "t0": t0, "points_dense": dense, "drift_dense": drift_dense}
@@ -99,7 +104,10 @@ CONFIRM_ANGLES = tuple(np.linspace(20.0, 340.0, 200))
 
 def streak_objects_day(prep: dict):
     """Streak objects of every scan in the day, after removing fixed echoes: returns
-    a list of (scan index, objects, label image) and the persistence map."""
+    a list of (scan index, objects, label image) and the persistence map. The result is
+    cached in prep (it depends only on the radar)."""
+    if "_streak_objects" in prep:
+        return prep["_streak_objects"]
     G = prep["grids"]
     xs = G.x0 + G.res * np.arange(G.z.shape[2])
     ys = G.y0 + G.res * np.arange(G.z.shape[1])
@@ -121,6 +129,7 @@ def streak_objects_day(prep: dict):
         o = obj[frac.to_numpy() < PERSISTENT_OVERLAP]
         if not o.empty:
             kept.append((k, o, lab))
+    prep["_streak_objects"] = (kept, persist, xs, ys)
     return kept, persist, xs, ys
 
 
@@ -140,13 +149,16 @@ def screen_passes(day_stat: dict) -> bool:
     return bool(day_stat.get("p_day", 1.0) <= SCREEN_P or (np.isfinite(pg) and pg <= SCREEN_P_GAMMA))
 
 
-def match_day(prep: dict, angles=SCREEN_ANGLES, reverse: bool = False) -> pd.DataFrame:
+def match_day(prep: dict, angles=SCREEN_ANGLES, reverse: bool = False,
+              max_temp_c=match.T_SEED_MAX_C) -> pd.DataFrame:
     """Streak objects in every scan of the day (fixed echoes removed), each matched to its
-    best new flight with rotation placebos (reverse=True: the time-reversed diagnostic)."""
+    best new flight with rotation placebos (reverse=True: the time-reversed diagnostic;
+    max_temp_c=None: no temperature requirement, for null-mode days)."""
     G = prep["grids"]
     pts, dr = matching_points(prep)
     kept, _, xs, ys = streak_objects_day(prep)
-    rows = [match.match_streaks(G, G.t[k], lab, obj, xs, ys, pts, dr, angles=angles, reverse=reverse)
+    rows = [match.match_streaks(G, G.t[k], lab, obj, xs, ys, pts, dr, angles=angles, reverse=reverse,
+                                max_temp_c=max_temp_c)
             for k, obj, lab in kept]
     rows = [r for r in rows if not r.empty]
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
@@ -227,14 +239,16 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
     # streak objects matched to single flights (match.py): screen with few rotations,
     # confirm promising days with many. With 24 rotations the rank p-value cannot go below
     # 0.04, so the smooth gamma-tail estimate also lets a borderline day through.
-    streak_table = match_day(prep, SCREEN_ANGLES)
+    tmax = None if null else match.T_SEED_MAX_C
+    summary["max_temp_c"] = tmax
+    streak_table = match_day(prep, SCREEN_ANGLES, max_temp_c=tmax)
     summary["streaks"] = match.day_statistic(streak_table)
     summary["streaks"]["n_rotations"] = len(SCREEN_ANGLES)
     # the screening result is kept for every day: it is the one statistic computed the same
     # way on all days, so census-level selection uses it (census_summary.py)
     summary["streaks_screen"] = dict(summary["streaks"])
     if screen_passes(summary["streaks"]):
-        streak_table = match_day(prep, CONFIRM_ANGLES)
+        streak_table = match_day(prep, CONFIRM_ANGLES, max_temp_c=tmax)
         summary["streaks"] = match.day_statistic(streak_table)
         summary["streaks"]["n_rotations"] = len(CONFIRM_ANGLES)
         if not streak_table.empty:
@@ -242,7 +256,8 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
     # time-reversed diagnostic: aircraft that pass 10-50 min AFTER each scan cannot have made
     # its echoes; their excess over rotations measures alignment with traffic corridors
     # that is not caused by seeding
-    summary["streaks_reverse"] = match.day_statistic(match_day(prep, SCREEN_ANGLES, reverse=True))
+    summary["streaks_reverse"] = match.day_statistic(match_day(prep, SCREEN_ANGLES, reverse=True,
+                                                               max_temp_c=tmax))
     if save and not streak_table.empty:
         out_dir.mkdir(parents=True, exist_ok=True)
         st = streak_table.copy()

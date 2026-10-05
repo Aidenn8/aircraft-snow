@@ -17,6 +17,14 @@ mean widths of 1.2-3.5 km (median 2.2 km) at 15-60 min, which for a Gaussian pro
 6 dB below its peak means s ~ 0.6-0.9 km; they were visible for about an hour. (Hole-punch
 holes in cloud widen faster, 1-2 m/s, Iwasaki & Fujii 2025, but the snow falling out of
 them stays narrower.)
+
+Physical timing (when the point's height above the beam, dh, and a fall speed v are given):
+ice from a point dh metres above the beam centre reaches the beam after a* = dh / v, so
+each point has its own envelope, a triangle peaking at a* with half-width
+max(FALL_SPREAD * a*, MIN_HALF_S) (a spread of fall speeds), and nothing before GROWTH_S
+(the particles need time to grow to radar-visible size). A descending aircraft therefore
+leaves a streak whose parts appear at different ages, as in nature. Points at or below the
+beam leave nothing.
 """
 from __future__ import annotations
 
@@ -30,6 +38,9 @@ END_S = 90 * 60
 S0_M = 500.0
 SPREAD_MS = 0.2
 WIND_ERR_MS = 0.7
+GROWTH_S = 10 * 60
+FALL_SPREAD = 0.3
+MIN_HALF_S = 10 * 60
 
 
 def envelope(age):
@@ -39,9 +50,21 @@ def envelope(age):
     return np.where(age < PEAK_S, up, down) * (age >= ONSET_S) * (age <= END_S)
 
 
-def inject(grids: Grids, x, y, t, drift, peak_dbz: float, rng=None, wind_err_ms=WIND_ERR_MS):
+def envelope_fall(age, arrival):
+    """Per-point envelope for physical timing: a triangle peaking at the arrival age at the
+    beam, zero before GROWTH_S; arrival is NaN (or <= 0) for points that never reach it."""
+    age = np.asarray(age, float)
+    a = np.asarray(arrival, float)
+    half = np.maximum(FALL_SPREAD * a, MIN_HALF_S)
+    w = np.clip(1 - np.abs(age - a) / half, 0, 1)
+    return np.where(np.isfinite(a) & (a > 0) & (age >= GROWTH_S), w, 0.0)
+
+
+def inject(grids: Grids, x, y, t, drift, peak_dbz: float, rng=None, wind_err_ms=WIND_ERR_MS,
+           dh=None, v_fall=None):
     """Return a copy of grids with a streak along the drifted points (x, y, t, drift).
-    Also returns the wind error used."""
+    Also returns the wind error used. With dh (m above the beam, per point) and v_fall
+    (m/s), each point's echo follows the physical timing described above."""
     rng = np.random.default_rng() if rng is None else rng
     err = rng.normal(0, wind_err_ms, 2)
     out = Grids(grids.t.copy(), grids.z.copy(), grids.x0, grids.y0, grids.res)
@@ -49,15 +72,19 @@ def inject(grids: Grids, x, y, t, drift, peak_dbz: float, rng=None, wind_err_ms=
     ny, nx = out.z.shape[1:]
     xs = out.x0 + out.res * np.arange(nx)
     ys = out.y0 + out.res * np.arange(ny)
+    physical = dh is not None and v_fall is not None
+    if physical:
+        dh = np.asarray(dh, float)
+        arrival = np.where(dh > 0, dh / v_fall, np.nan)
     for k, T in enumerate(out.t):
         age = T - t
-        w = envelope(age)
+        w = envelope_fall(age, arrival) if physical else envelope(age)
         m = w > 0
         if not m.any():
             continue
         px = x[m] + (drift[m, 0] + err[0]) * age[m]
         py = y[m] + (drift[m, 1] + err[1]) * age[m]
-        s = S0_M + SPREAD_MS * (age[m] - ONSET_S)
+        s = S0_M + SPREAD_MS * np.maximum(age[m] - (GROWTH_S if physical else ONSET_S), 0)
         add = np.zeros((ny, nx))
         r = 3.0 * s.max()
         for px_i, py_i, s_i, w_i in zip(px, py, s, w[m]):

@@ -42,3 +42,13 @@ def test_find_streaks_accepts_line_rejects_blob_and_speckle():
     o = obj.iloc[0]
     assert 17_000 <= o.length_m <= 21_000
     assert o.width_m < 2500
+
+
+def test_find_streaks_rejects_bright_convective_line():
+    n = 241
+    z = np.full((n, n), -10.0)
+    z[60:63, 40:80] = 15.0                       # light snow streak: kept
+    z[160:163, 40:80] = 45.0                     # same shape, convective intensity: rejected
+    obj, lab = streaks.find_streaks(_grid(z))
+    assert len(obj) == 1 and obj.iloc[0].z_max <= streaks.MAX_PEAK_DBZ
+    assert (lab[160:163, 40:80] == 0).all()

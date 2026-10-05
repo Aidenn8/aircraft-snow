@@ -2,12 +2,16 @@
 
 usage: injection_recovery.py SITE DAY [DAY ...] [--n N] [--peaks 5,10,15,20] [--seed S]
 
-For each trial a real flight is drawn at random from those with at least MIN_POINTS track
-points between 6000 and 14000 ft within 10-60 km of the radar. A streak (snow.inject) is
-added along its drifted track, with peak reflectivity from --peaks. The streak detector and
-single-flight matcher (with rotation placebos) are then run on the scans 10-60 min after
-the flight's passage. A trial is recovered when some streak object overlapping the injected
-streak's footprint is matched with p <= ALPHA. Results go to data/injection/SITE_DAYS.parquet.
+For each trial a fall speed is drawn from V_FALL (narrower than the detector's allowed
+range, so the test does not assume what it checks), then a real flight at random from
+those with at least MIN_DENSE interpolated track points that could physically seed: between
+6000 and 14000 ft, 10-60 km from the radar, HRRR temperature at or below the detector's
+seeding limit, and high enough above the beam that their ice reaches it 10-50 min later at
+that fall speed. A streak (snow.inject, physical timing) is added along those points' drifted
+track, with peak reflectivity from --peaks. The streak detector and single-flight matcher
+(with rotation placebos) are then run on the scans 10-60 min after the flight's passage. A
+trial is recovered when some streak object overlapping the injected streak's footprint is
+matched with p <= ALPHA. Results go to data/injection/SITE_DAYS_sSEED.parquet.
 """
 import argparse
 import datetime as dt
@@ -21,8 +25,9 @@ from snow import inject, match, pipeline, streaks
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 ALPHA = 0.05
-MIN_POINTS = 15
+MIN_DENSE = 40                      # 10 km of interpolated track
 BAND = (6000.0, 14000.0)
+V_FALL = (0.4, 1.2)                 # m/s, drawn uniformly per trial
 
 
 def run_trials(site, day, n, peaks, rng):
@@ -34,22 +39,24 @@ def run_trials(site, day, n, peaks, rng):
     rng_pts = np.hypot(pts.x, pts.y)
     t0 = prep["t0"].timestamp()
     sel = pts[(pts.alt_ft >= BAND[0]) & (pts.alt_ft < BAND[1]) & (rng_pts > 10e3) & (rng_pts < 60e3)
-              & (pts.t > t0 + 1800) & (pts.t < t0 + 86400 - 5400)]
-    # candidate flights: at least MIN_POINTS reported (not interpolated) positions in the band
-    orig = prep["points"]
-    r0 = np.hypot(orig.x, orig.y)
-    o_sel = orig[(orig.alt_ft >= BAND[0]) & (orig.alt_ft < BAND[1]) & (r0 > 10e3) & (r0 < 60e3)
-                 & (orig.t > t0 + 1800) & (orig.t < t0 + 86400 - 5400)]
-    counts = o_sel.groupby("flight").size()
-    candidates = counts[counts >= MIN_POINTS].index.to_numpy()
+              & (pts.t > t0 + 1800) & (pts.t < t0 + 86400 - 5400)
+              & (pts.temp_c <= match.T_SEED_MAX_C) & (pts.dh > 0)]
     rows = []
     for trial in range(n):
+        v = float(rng.uniform(*V_FALL))
+        arrival = sel.dh.to_numpy() / v
+        ok = (arrival >= match.AGE_MIN_S) & (arrival <= match.AGE_MAX_S)
+        counts = sel[ok].groupby("flight").size()
+        candidates = counts[counts >= MIN_DENSE].index.to_numpy()
+        if len(candidates) == 0:
+            continue
         f = rng.choice(candidates)
-        fp = sel[sel.flight == f]
+        fp = sel[ok & (sel.flight == f).to_numpy()]
         idx = fp.index.to_numpy()
         peak = float(rng.choice(peaks))
         Gi, err = inject.inject(G, fp.x.to_numpy(), fp.y.to_numpy(), fp.t.to_numpy(float), dr[idx],
-                                peak, rng=rng)
+                                peak, rng=rng, dh=fp.dh.to_numpy(), v_fall=v)
+        arr = fp.dh.to_numpy() / v
         t_pass = float(fp.t.median())
         scans = np.nonzero((Gi.t >= t_pass + 10 * 60) & (Gi.t <= t_pass + 60 * 60))[0]
         best_p, best_cov, found_obj = 1.0, 0.0, False
@@ -61,7 +68,7 @@ def run_trials(site, day, n, peaks, rng):
                 continue
             # objects overlapping the injected streak: the injection's own footprint at T
             age = T - fp.t.to_numpy(float)
-            w = inject.envelope(age) > 0.3
+            w = inject.envelope_fall(age, arr) > 0.3
             if not w.any():
                 continue
             px = fp.x.to_numpy()[w] + (dr[idx][w, 0] + err[0]) * age[w]
@@ -82,7 +89,8 @@ def run_trials(site, day, n, peaks, rng):
             if best_p <= ALPHA:
                 break
         rows.append({"site": site, "day": str(day), "trial": trial, "flight": int(f), "peak_dbz": peak,
-                     "n_points": len(fp), "alt_ft": float(fp.alt_ft.median()),
+                     "n_points": len(fp), "alt_ft": float(fp.alt_ft.median()), "v_fall": v,
+                     "dh_m": float(fp.dh.median()), "temp_c": float(fp.temp_c.median()),
                      "wind_err_u": err[0], "wind_err_v": err[1], "object_found": found_obj,
                      "best_p": best_p, "best_cov": best_cov, "recovered": best_p <= ALPHA})
         print(f"{site} {day} trial {trial}: peak {peak:4.0f} dBZ object {found_obj!s:5} p {best_p:.3f}",
