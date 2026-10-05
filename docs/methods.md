@@ -148,12 +148,26 @@ rotation of 200 reached it (rank p < 0.005, gamma tail p = 2e-4). At p <= 0.005,
 
 ## Calibration
 
-- Synthetic streaks injected along real flights' drifted tracks into real radar on quiet
-  days (inject.py: Gaussian cross-section 0.5 km growing 0.2 m/s, onset 15 min, peak 35 min,
-  gone at 90 min, wind error 0.7 m/s per component). Recall of the final method on three
-  quiet Denver days (120 trials, recovery = matched at p <= 0.05 against 101 rotations):
-  5/31 at 5 dBZ peak (16%), 35/37 at 10 dBZ (95%), 22/26 at 15 dBZ (85%), 22/26 at 20 dBZ
-  (85%).
+- Recall from synthetic streaks injected into real radar on three quiet Denver days (1-3
+  January 2025), recovery = matched to the injected flight at p <= 0.05 against 101
+  rotations. The injection is physical (inject.py, scripts/injection_recovery.py): a
+  supercooled layer 300-800 m deep is placed at a height a real flight crossed; its points
+  in the layer seed; each point's ice reaches the beam after (height above the beam) /
+  (fall speed, 0.4-1.2 m/s, narrower than the detector's allowed range); nothing is
+  visible before 10 min; the streak is 1.5-3.0 km wide above 3 dBZ when it appears (the
+  widths of the detected Denver streaks) and widens at 0.2 m/s; HRRR wind error 0.7 m/s per
+  component. Recall (138 trials, 95% intervals): 10/33 at 5 dBZ peak (30%, 16-49%), 15/30 at
+  10 dBZ (50%, 31-69%), 19/34 at 15 dBZ (56%, 38-73%), 27/41 at 20 dBZ (66%, 49-80%). Most
+  trials were flights climbing or descending through the layer (88 of 105 at >= 10 dBZ
+  crossed more than 1000 ft of it), which leave shorter, sheared streaks: 55% of those
+  were recovered, against 77% of flights within 300-1000 ft and 3 of 4 near-level ones.
+- Two earlier injection models were wrong in instructive ways. Injecting every point of a
+  6 000-14 000 ft band on a fixed timetable (onset 15, peak 35 min) gave 85-95% recall, but
+  ignored that ice from different heights reaches the beam at different times. Adding that
+  timing with a fixed Gaussian width made brighter streaks harder to find (42% found at
+  20 dBZ against 73% at 10 dBZ): a Gaussian in linear units is wider above a fixed
+  threshold the brighter it is, so bright injections exceeded the 3.5 km width limit, unlike
+  real streaks.
 - False alarms: the same pipeline on July days restricted to tracks below 13 000 ft, where
   the air is above freezing and aircraft cannot seed (null mode; only points the HRRR puts
   above 0 C are used).
