@@ -29,18 +29,22 @@ Results will be summarised here when it is complete.*
    fixed clutter removed.
 5. **Matching** (`snow/match.py`): each streak is compared with every flight that passed
    10-50 minutes earlier, its track carried by the wind. A match needs the streak to lie along
-   the drifted track (coverage and precision), and the air to have been echo-free before the
-   aircraft arrived. Chance is measured by repeating everything with all flights rotated about
-   the radar.
+   the drifted track (coverage and precision), the air to have been echo-free before the
+   aircraft arrived, and physically possible seeding: air at or below -4 C, and a height above
+   the radar beam that ice falling at snow speeds (0.2-2 m/s) would cover in the observed time.
+   Chance is measured by repeating everything with all flights rotated about the radar.
 6. **Day test** (`snow/match.py: day_statistic`): the evidence from all matched flights of a
-   radar-day, against the same statistic for every rotated flight set.
+   radar-day, against the same statistic for every rotated flight set; across the census,
+   days are selected at a 5% false discovery rate after calibrating the statistic's tail on
+   the rotations themselves (`scripts/census_summary.py`).
 7. **Calibration**: synthetic streaks injected into real radar data (`snow/inject.py`,
    `scripts/injection_recovery.py`) measure recall; warm-season days where seeding is
-   impossible, rotation placebos and a time-reversed test measure false alarms.
+   impossible, translated instead of rotated flights (`scripts/shift_null.py`) and a
+   time-reversed test measure false alarms.
 
-An independent second test (`snow/event.py`) follows every track point's air parcel and
-compares the change in reflectivity on the track with lines beside it, against the same
-rotated placebos.
+A second test (`snow/event.py`), which follows every track point's air parcel and compares
+the change in reflectivity on the track with lines beside it, turned out not to be
+calibrated on winter days and is not used in the census (see `docs/methods.md`).
 
 See `docs/background.md` for the science and prior work and `docs/methods.md` for the method
 and the lessons learned building it.
