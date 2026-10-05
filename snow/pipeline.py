@@ -54,7 +54,7 @@ def load_scans(site: str, t_a: dt.datetime, t_b: dt.datetime):
     return scans
 
 
-def prepare(site: str, day: dt.date, scans=None):
+def prepare(site: str, day: dt.date, scans=None, alt_max_ft: float | None = None):
     """Everything the event test needs: grids, points with drift, the radar sweep header."""
     t0, t1 = day_window(day)
     if scans is None:
@@ -64,8 +64,9 @@ def prepare(site: str, day: dt.date, scans=None):
     sw0 = scans[0][1]
     lat0, lon0 = sw0.radar_lat, sw0.radar_lon
     pos = flights.segment(flights.load_window(lat0, lon0, MAX_RANGE_M / 1000 + 5,
-                                              t0 - dt.timedelta(minutes=5), t1))
-    pts = pos[(pos.alt_ft >= ALT_RANGE_FT[0]) & (pos.alt_ft < ALT_RANGE_FT[1])].copy()
+                                              t0 - dt.timedelta(minutes=5), t1, site=site))
+    hi = ALT_RANGE_FT[1] if alt_max_ft is None else min(alt_max_ft, ALT_RANGE_FT[1])
+    pts = pos[(pos.alt_ft >= ALT_RANGE_FT[0]) & (pos.alt_ft < hi)].copy()
     rng = np.hypot(pts.x, pts.y).to_numpy()
     h_beam, _ = beam_height_ground_range(rng, sw0.elevation, sw0.radar_height)
     # pressure altitude ~ altitude above sea level to within a few hundred feet
@@ -77,7 +78,7 @@ def prepare(site: str, day: dt.date, scans=None):
     drift = epoch.drift_velocity(pts, profs, sw0.radar_height, sw0.elevation)
     # every aircraft at any altitude (including ones on the ground) is masked out of the radar
     allpos = flights.load_window(lat0, lon0, MAX_RANGE_M / 1000 + 15, t0 - dt.timedelta(hours=1),
-                                 t1 + dt.timedelta(hours=1.5), max_alt_ft=60_000)
+                                 t1 + dt.timedelta(hours=1.5), max_alt_ft=60_000, site=site)
     grids = event.Grids.from_sweeps(scans, aircraft=allpos[["hex", "t", "x", "y", "gs"]])
     # tracks interpolated to 250 m spacing for streak matching; each interpolated point
     # inherits the drift of the reported position it starts from
@@ -131,8 +132,13 @@ def match_day(prep: dict, angles=SCREEN_ANGLES) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
-def run_day(site: str, day: dt.date, save: bool = True, force: bool = False) -> dict:
-    out_dir = OUT / site
+def run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
+            null_alt_max_ft: float | None = None) -> dict:
+    """Run both tests for one radar-day. With null_alt_max_ft set (null mode, for
+    false-alarm calibration on warm days), only tracks below that altitude are used, the
+    screens are skipped and results go to data/events_null/."""
+    null = null_alt_max_ft is not None
+    out_dir = (OUT.parent / "events_null" if null else OUT) / site
     summ_path = out_dir / f"{day:%Y-%m-%d}.json"
     if summ_path.exists() and not force:
         return json.loads(summ_path.read_text())
@@ -140,16 +146,16 @@ def run_day(site: str, day: dt.date, save: bool = True, force: bool = False) -> 
     t0, _ = day_window(day)
     lat0, lon0 = site_location(site)
     cm = screen.cold_moist(lat0, lon0, t0)
-    if not cm["pass"]:
+    if not cm["pass"] and not null:
         summary = {"site": site, "day": f"{day}", "screened_out": "no cold moist layer",
                    "cold_moist": cm, "seconds": round(time.time() - tic, 1)}
         if save:
             out_dir.mkdir(parents=True, exist_ok=True)
             summ_path.write_text(json.dumps(summary, indent=1, default=float))
         return summary
-    prep = prepare(site, day)
+    prep = prepare(site, day, alt_max_ft=null_alt_max_ft)
     ep = screen.echo_present(prep["grids"])
-    if not ep["pass"]:
+    if not ep["pass"] and not null:
         summary = {"site": site, "day": f"{day}", "screened_out": "no echo",
                    "cold_moist": cm, "echo": ep, "seconds": round(time.time() - tic, 1)}
         if save:
@@ -176,6 +182,8 @@ def run_day(site: str, day: dt.date, save: bool = True, force: bool = False) -> 
         streak_table = match_day(prep, CONFIRM_ANGLES)
         summary["streaks"] = match.day_statistic(streak_table)
         summary["streaks"]["n_rotations"] = len(CONFIRM_ANGLES)
+        if not streak_table.empty:
+            summary["streaks"]["fdr"] = match.empirical_fdr(streak_table).to_dict(orient="records")
     if save and not streak_table.empty:
         out_dir.mkdir(parents=True, exist_ok=True)
         st = streak_table.copy()

@@ -32,6 +32,18 @@ def test_day_statistic_detects_signal():
     assert s["n_matched"] == n
 
 
+def test_empirical_fdr_null_and_signal():
+    rng = np.random.default_rng(2)
+    n, R = 200, 50
+    allc = np.where(rng.random((n, R + 1)) < 0.5, rng.random((n, R + 1)), 0.0)
+    f = match.empirical_fdr(_table(allc[:, 0], allc[:, 1:]), thresholds=(0.05,))
+    assert 0.5 < f.fdr.iloc[0] < 2.0                      # all matches are expected false
+    real = allc[:, 0].copy()
+    real[:40] = 1.0                                        # 40 genuine streaks beat every placebo
+    f = match.empirical_fdr(_table(real, allc[:, 1:]), thresholds=(0.05,))
+    assert f.n_real.iloc[0] >= 40 and f.fdr.iloc[0] < 0.4 and f.excess.iloc[0] > 30
+
+
 def test_newness_quiet_and_echo():
     from snow import event
     res = 500.0

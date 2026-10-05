@@ -17,16 +17,37 @@ from .weather import pressure_from_pressure_altitude
 GAP_S = 20 * 60
 
 
+def _day_positions(d: dt.date, site: str | None) -> pd.DataFrame:
+    """One day's positions: the per-radar split file when available (and radius allows),
+    else the continental file."""
+    if site is not None:
+        path = adsb.ROOT / "data" / "adsb_radar" / site / f"{d}.parquet"
+        if path.exists():
+            return pd.read_parquet(path)
+    if not adsb.day_path(d).exists():
+        raise FileNotFoundError(f"ADS-B for {d} not downloaded")
+    return adsb.load_day(d)
+
+
+def load_calls(d: dt.date, site: str | None = None) -> pd.DataFrame:
+    if site is not None:
+        path = adsb.ROOT / "data" / "adsb_radar" / site / f"{d}.calls.parquet"
+        if path.exists():
+            return pd.read_parquet(path)
+    return adsb.load_calls(d)
+
+
 def load_window(lat0: float, lon0: float, radius_km: float, start: dt.datetime,
-                end: dt.datetime, max_alt_ft: float = 30_000) -> pd.DataFrame:
-    """Airborne positions within radius_km of (lat0, lon0) between start and end."""
+                end: dt.datetime, max_alt_ft: float = 30_000, site: str | None = None) -> pd.DataFrame:
+    """Airborne positions within radius_km of (lat0, lon0) between start and end. With
+    `site`, per-radar split files (snow.adsb_split, radius 100 km) are used when present."""
+    if site is not None and radius_km > 100.0:
+        site = None
     days = sorted({(start + dt.timedelta(days=k)).date()
                    for k in range((end.date() - start.date()).days + 1)})
     parts = []
     for d in days:
-        if not adsb.day_path(d).exists():
-            raise FileNotFoundError(f"ADS-B for {d} not downloaded")
-        p = adsb.load_day(d)
+        p = _day_positions(d, site)
         p = p[(p.t >= start.timestamp()) & (p.t <= end.timestamp())]
         dlat = radius_km / 111.0
         dlon = radius_km / (111.0 * np.cos(np.radians(lat0)))

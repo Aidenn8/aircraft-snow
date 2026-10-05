@@ -130,6 +130,21 @@ def best_new_match(grids, sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None)
     return 0.0, -1, np.nan, np.nan, np.nan, np.nan, 0.0, 0.0
 
 
+def matched_points(sx, sy, points: pd.DataFrame, drift: np.ndarray, T: float, flight: int,
+                   du: float, dv: float) -> pd.DataFrame:
+    """The matched flight's (interpolated) points whose drifted position at T lies within
+    TOL_M of the streak's skeleton: these are where the aircraft seeded."""
+    from scipy.spatial import cKDTree
+    f = (points.flight.to_numpy() == flight)
+    age = T - points.t.to_numpy(float)
+    m = f & (age >= AGE_MIN_S) & (age <= AGE_MAX_S)
+    p = points[m]
+    px = p.x.to_numpy() + (drift[m, 0] + du) * age[m]
+    py = p.y.to_numpy() + (drift[m, 1] + dv) * age[m]
+    d, _ = cKDTree(np.c_[sx, sy]).query(np.c_[px, py], distance_upper_bound=TOL_M)
+    return p[np.isfinite(d)]
+
+
 def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
                   points: pd.DataFrame, drift: np.ndarray, angles=PLACEBO_ANGLES) -> pd.DataFrame:
     """For every streak object: the best real flight that passes the newness test, its F1
@@ -149,13 +164,52 @@ def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
         f1, f, du, dv, t_pass, q, cov, prec = best_new_match(grids, sx, sy, x, y, t, T, dr, fl, tree=tree)
         plac = np.array([best_new_match(grids, sx, sy, x, y, t, T, dr, fl, rot=r, tree=tree)[0]
                          for r in angles])
+        alt_med, p_med, n_seed = np.nan, np.nan, 0
+        if f >= 0:
+            mp = matched_points(sx, sy, points, drift, T, f, du, dv)
+            if len(mp):
+                alt_med, p_med, n_seed = float(mp.alt_ft.median()), float(mp.p_hpa.median()), len(mp)
         rows.append({**o.to_dict(), "flight": f, "coverage": f1, "cov": cov, "precision": prec,
+                     "seed_alt_ft": alt_med, "seed_p_hpa": p_med, "n_seed_points": n_seed,
                      "du": du, "dv": dv, "t_pass": t_pass, "age_s": T - t_pass if f >= 0 else np.nan,
                      "quiet_before": q, "placebo_mean": float(plac.mean()),
                      "placebo_q95": float(np.quantile(plac, 0.95)),
                      "placebo_frac_matched": float(np.mean(plac > 0)),
                      "p_value": float((1 + np.sum(plac >= f1)) / (1 + len(plac))) if f1 > 0 else 1.0,
                      "placebo_cov": plac.astype(np.float32)})
+    return pd.DataFrame(rows)
+
+
+def pseudo_pvalues(table: pd.DataFrame) -> np.ndarray:
+    """p-values of every streak for the real set (column 0) and for each rotation treated
+    as if it were real (columns 1..R), each against all the other sets. Shape (n, R + 1)."""
+    C0 = table.coverage.to_numpy(float)
+    CP = np.stack(table.placebo_cov.to_numpy()).astype(float)
+    allc = np.concatenate([C0[:, None], CP], axis=1)
+    R = CP.shape[1]
+    out = np.ones_like(allc)
+    for col in range(R + 1):
+        c = allc[:, col]
+        ge = (allc >= c[:, None]).sum(axis=1) - 1
+        out[:, col] = np.where(c > 0, (1 + ge) / (1 + R), 1.0)
+    return out
+
+
+def empirical_fdr(table: pd.DataFrame, thresholds=(0.005, 0.01, 0.02, 0.05)) -> pd.DataFrame:
+    """For each p-value threshold: the number of real streak matches at or below it, the
+    mean number the rotations produce when treated as real (the false matches expected
+    under 'no aircraft effect'), the implied false discovery rate and the estimated number
+    of true aircraft streaks (real minus expected false)."""
+    P = pseudo_pvalues(table)
+    rows = []
+    for tau in thresholds:
+        n_real = int((P[:, 0] <= tau).sum())
+        null = (P[:, 1:] <= tau).sum(axis=0)
+        exp_false = float(null.mean())
+        rows.append({"threshold": tau, "n_real": n_real, "expected_false": exp_false,
+                     "null_q95": float(np.quantile(null, 0.95)),
+                     "fdr": exp_false / n_real if n_real else np.nan,
+                     "excess": n_real - exp_false})
     return pd.DataFrame(rows)
 
 
@@ -168,20 +222,11 @@ def day_statistic(table: pd.DataFrame) -> dict:
     (1 + number of rotations with E >= real E) / (1 + number of rotations)."""
     if table.empty:
         return {"E": 0.0, "p_day": 1.0, "n_streaks": 0, "n_matched": 0}
-    C0 = table.coverage.to_numpy(float)                      # (n_streaks,)
-    CP = np.stack(table.placebo_cov.to_numpy()).astype(float)  # (n_streaks, R)
-    R = CP.shape[1]
-    allc = np.concatenate([C0[:, None], CP], axis=1)          # column 0 = real
-
-    def pvals(col):
-        c = allc[:, col]
-        ge = (allc >= c[:, None]).sum(axis=1) - 1              # others with coverage >= this
-        p = (1 + ge) / (1 + R)
-        return np.where(c > 0, p, 1.0)
-
-    E = lambda col: float(-np.log10(pvals(col)).sum())
-    E_real = E(0)
-    E_null = np.array([E(j) for j in range(1, R + 1)])
+    C0 = table.coverage.to_numpy(float)
+    P = pseudo_pvalues(table)                     # column 0 real, 1..R rotations as if real
+    R = P.shape[1] - 1
+    E_all = -np.log10(P).sum(axis=0)
+    E_real, E_null = float(E_all[0]), E_all[1:]
     return {"E": E_real, "p_day": float((1 + np.sum(E_null >= E_real)) / (1 + R)),
             "E_null_median": float(np.median(E_null)), "E_null_q95": float(np.quantile(E_null, 0.95)),
             "n_streaks": int(len(table)), "n_matched": int((C0 > 0).sum())}

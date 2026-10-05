@@ -19,6 +19,8 @@ def main():
     ap.add_argument("start")
     ap.add_argument("end")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--null-alt", type=float, default=None,
+                    help="null mode: only tracks below this altitude (ft), no screens")
     a = ap.parse_args()
     d = dt.date.fromisoformat(a.start)
     end = dt.date.fromisoformat(a.end)
@@ -29,7 +31,11 @@ def main():
             d += dt.timedelta(days=1)
             continue
         try:
-            s = pipeline.run_day(a.site, d, force=a.force)
+            s = pipeline.run_day(a.site, d, force=a.force, null_alt_max_ft=a.null_alt)
+            if "screened_out" in s:
+                print(f"{a.site} {d}: screened out ({s['screened_out']})", flush=True)
+                d += dt.timedelta(days=1)
+                continue
             st = s["stats"]
             sk = s.get("streaks", {})
             print(f"{a.site} {d}: flights {s['n_flights']:5d} scans {s['n_scans']:3d}  "

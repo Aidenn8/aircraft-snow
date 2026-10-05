@@ -1,0 +1,17 @@
+radar,airports,reason
+KFTG,DEN,documented case (Denver 25 Jan 2025); radar 14 km from DEN; frequent upslope stratus
+KLOT,ORD MDW,busiest Midwest hub pair within 45 km; frequent winter stratus
+KMPX,MSP,radar 27 km from MSP; long cold season
+KDTX,DTW,radar 55 km from DTW; Great Lakes stratus
+KCLE,CLE,radar at the airport; lake-effect and stratus
+KBUF,BUF,radar at the airport; lake-effect region
+KIND,IND,radar at the airport
+KPBZ,PIT,radar 5 km from PIT
+KLWX,IAD DCA,radar 5 km from IAD and 41 km from DCA
+KOKX,JFK LGA ISP,New York area; radar 81 km from JFK (part of the traffic in range)
+KBOX,BOS PVD,radar 46 km from BOS and 35 km from PVD
+KMKX,MKE,radar 53 km from MKE
+KLSX,STL,radar 28 km from STL
+KEAX,MCI,radar 67 km from MCI
+KOAX,OMA,radar 40 km from OMA
+KDMX,DSM,radar 23 km from DSM

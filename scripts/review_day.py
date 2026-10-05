@@ -34,7 +34,7 @@ def main():
     S = pd.read_parquet(st_path) if st_path.exists() else pd.DataFrame()
     prep = pipeline.prepare(a.site, day)
     G, pts = prep["grids"], prep["points"]
-    calls = pd.concat([adsb.load_calls(day), adsb.load_calls(day + dt.timedelta(days=1))])
+    calls = pd.concat([flights.load_calls(day, a.site), flights.load_calls(day + dt.timedelta(days=1), a.site)])
     ft = flights.flight_table(prep["positions"], calls)
     xs = G.x0 + G.res * np.arange(G.z.shape[2])
     ys = G.y0 + G.res * np.arange(G.z.shape[1])
