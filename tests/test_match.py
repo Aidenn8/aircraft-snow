@@ -156,6 +156,19 @@ def _one_streak_case(dh, temp_c):
     return g, lab, objects, xs, pts, drift
 
 
+def test_match_streaks_with_placebo_sets():
+    T = 3600.0
+    g, lab, objects, xs, pts, drift = _one_streak_case(1000.0, -15.0)
+    away = pts.assign(y=pts.y + 20e3, flight=99)               # another day's flight, elsewhere
+    sets = [(away, drift)] * 9
+    r = match.match_streaks(g, T, lab, objects, xs, xs, pts, drift, placebo_sets=sets)
+    assert r.flight.iloc[0] == 7 and r.p_value.iloc[0] == 0.1  # beats all 9 sets: 1 / (1 + 9)
+    same = [(pts.assign(flight=99), drift)] + sets[1:]        # one set flew the same path
+    r = match.match_streaks(g, T, lab, objects, xs, xs, pts, drift, placebo_sets=same)
+    assert r.p_value.iloc[0] == 0.2
+    assert r.placebo_flight.iloc[0][0] == 99
+
+
 def test_match_streaks_physical_requirements():
     T = 3600.0
     angles = (90.0, 180.0, 270.0)
