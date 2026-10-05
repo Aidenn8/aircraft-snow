@@ -31,7 +31,8 @@ columns dh, bw are matched without this filter.)
 
 Temperature: only points where the HRRR analysis is at or below T_SEED_MAX_C are candidates
 (supercooled cloud is needed; the bound is far warmer than any reported seeding threshold,
-so it removes only points that cannot seed). Null-mode runs on warm days switch it off.
+so it removes only points that cannot seed). Null-mode runs (max_temp_c=None) use only
+points above freezing instead, so that no match can be real.
 
 Chance: the whole procedure is repeated for placebo flight sets, every flight rotated about
 the radar by an angle in PLACEBO_ANGLES (same ranges, shapes, timing and wind, wrong place).
@@ -77,14 +78,19 @@ def fall_ok(dh, bw, age):
     return (dh + bw >= V_FALL_MIN_MS * a) & (dh - bw <= V_FALL_MAX_MS * a)
 
 
+NULL_MIN_TEMP_C = 0.0              # null mode: only points above freezing (seeding impossible)
+
+
 def _physical_mask(points: pd.DataFrame, age: np.ndarray, max_temp_c=T_SEED_MAX_C) -> np.ndarray:
     """Points that could have made echo seen at the beam at this age: fall speed in range,
-    and (unless max_temp_c is None) cold enough for supercooled cloud."""
+    and cold enough for supercooled cloud (max_temp_c). With max_temp_c=None (null mode)
+    the opposite: only points warmer than NULL_MIN_TEMP_C, where no aircraft can seed."""
     m = np.ones(len(points), bool)
     if "dh" in points and "bw" in points:
         m &= fall_ok(points.dh.to_numpy(float), points.bw.to_numpy(float), age)
-    if max_temp_c is not None and "temp_c" in points:
-        m &= points.temp_c.to_numpy(float) <= max_temp_c
+    if "temp_c" in points:
+        tc = points.temp_c.to_numpy(float)
+        m &= (tc <= max_temp_c) if max_temp_c is not None else (tc > NULL_MIN_TEMP_C)
     return m
 
 

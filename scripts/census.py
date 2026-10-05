@@ -17,10 +17,10 @@ import traceback
 from snow import adsb, adsb_split
 
 
-def one(site: str, day: dt.date, force: bool) -> str:
+def one(site: str, day: dt.date, force: bool, null_alt: float | None = None) -> str:
     from snow import pipeline
     try:
-        s = pipeline.run_day(site, day, force=force, event_test=False)
+        s = pipeline.run_day(site, day, force=force, event_test=False, null_alt_max_ft=null_alt)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         return f"{site} {day}: FAILED {e!r}"
@@ -41,6 +41,10 @@ def main():
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--sites", default="", help="comma-separated subset of the census radars")
+    ap.add_argument("--null-alt", type=float, default=None,
+                    help="null mode (warm-season calibration): tracks below this altitude, results "
+                         "to data/events_null")
+    ap.add_argument("--step", type=int, default=1, help="every STEP-th day")
     a = ap.parse_args()
     all_sites = adsb_split.census_sites()
     sites = [s for s in a.sites.split(",") if s] or all_sites
@@ -55,13 +59,16 @@ def main():
     with cf.ProcessPoolExecutor(a.workers) as ex:
         d = d0
         while d <= d1:
+            if (d - d0).days % a.step:
+                d += dt.timedelta(days=1)
+                continue
             if adsb.day_path(d).exists() and adsb.day_path(d + dt.timedelta(days=1)).exists():
                 # split for every census radar while the continental file is open (cheap,
                 # and later phases can reuse it)
                 adsb_split.split_day(d, all_sites)
                 adsb_split.split_day(d + dt.timedelta(days=1), all_sites)
                 for s in sites:
-                    f = ex.submit(one, s, d, a.force)
+                    f = ex.submit(one, s, d, a.force, a.null_alt)
                     f.add_done_callback(lambda f: print(f.result(), flush=True))
                     futs.append(f)
                 n += len(sites)
