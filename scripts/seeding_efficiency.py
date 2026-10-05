@@ -84,11 +84,15 @@ def main():
                 age = T - t_pass
                 if not (match.AGE_MIN_S <= age <= match.AGE_MAX_S):
                     continue
+                # the same physical requirements as the census matcher (fall speed, temperature)
+                mk = match._physical_mask(p, T - p.t.to_numpy(float))
+                if mk.sum() < 4:
+                    continue
                 for sx, sy in sks:
                     if len(sx) < 4:
                         continue
-                    c = match._candidates(sx, sy, p.x.to_numpy(), p.y.to_numpy(), p.t.to_numpy(float), T,
-                                          d, p.flight.to_numpy(), rot=rot)
+                    c = match._candidates(sx, sy, p.x.to_numpy()[mk], p.y.to_numpy()[mk],
+                                          p.t.to_numpy(float)[mk], T, d[mk], p.flight.to_numpy()[mk], rot=rot)
                     if c:
                         b = max(b, c[0][0])
             return b

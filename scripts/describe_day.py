@@ -65,6 +65,8 @@ def main():
             "seed_temp_min": float(mp.temp.min()) if len(mp) else np.nan,
             "seed_temp_max": float(mp.temp.max()) if len(mp) else np.nan,
             "seed_rh": float(mp.RH.median()) if len(mp) else np.nan,
+            "seed_dh_m": float(mp.dh.median()) if len(mp) and "dh" in mp else np.nan,
+            "v_fall": float(np.median(mp.dh / (o.t - mp.t))) if len(mp) and "dh" in mp else np.nan,
             "n_seed_points": len(mp),
         })
     out = pd.DataFrame(rows).sort_values("time_utc")
@@ -72,7 +74,8 @@ def main():
     out.to_csv(path, index=False)
     pd.set_option("display.width", 250)
     print(out[["time_utc", "callsign", "icao_type", "engine_class", "phase", "seed_alt_ft", "seed_temp_c",
-               "age_min", "length_km", "z_max", "snow_mm_h_max", "f1", "p_value"]].round(2).to_string())
+               "seed_dh_m", "v_fall", "age_min", "length_km", "z_max", "snow_mm_h_max", "f1",
+               "p_value"]].round(3).to_string())
     print(path)
 
 

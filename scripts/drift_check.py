@@ -65,7 +65,8 @@ def main():
         tree = cKDTree(np.c_[sx, sy])
         T = float(o.t)
         age = T - pts.t.to_numpy(float)
-        m = (pts.flight.to_numpy() == o.flight) & (age >= match.AGE_MIN_S) & (age <= match.AGE_MAX_S)
+        m = ((pts.flight.to_numpy() == o.flight) & (age >= match.AGE_MIN_S) & (age <= match.AGE_MAX_S)
+             & match._physical_mask(pts, age))
         x, y, ag, d = pts.x.to_numpy()[m], pts.y.to_numpy()[m], age[m], dr[m]
         F = np.zeros((len(grid), len(grid)))
         for i, du in enumerate(grid):
