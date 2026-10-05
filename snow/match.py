@@ -268,6 +268,29 @@ def empirical_fdr(table: pd.DataFrame, thresholds=(0.005, 0.01, 0.02, 0.05)) -> 
     return pd.DataFrame(rows)
 
 
+def tail_pvalues(E_real: float, E_null: np.ndarray) -> dict:
+    """Smooth tail estimates of P(E_null >= E_real) beyond the 1/(R+1) resolution of the rank
+    p-value: a z-score under a normal approximation, and a gamma distribution fitted to the
+    null scores (E is a non-negative sum of evidence, typically right-skewed). Both are
+    approximations whose calibration is checked on null days."""
+    from scipy import stats
+    E_null = np.asarray(E_null, float)
+    mu, sd = float(E_null.mean()), float(E_null.std(ddof=1)) if len(E_null) > 1 else 0.0
+    out = {"z_day": (E_real - mu) / sd if sd > 0 else np.nan}
+    out["p_day_z"] = float(stats.norm.sf(out["z_day"])) if sd > 0 else np.nan
+    pos = E_null[E_null > 0]
+    if len(pos) >= 10 and np.std(pos) > 0:
+        # moment-matched gamma for the positive part, mixed with the point mass at zero
+        frac0 = 1 - len(pos) / len(E_null)
+        k = pos.mean() ** 2 / pos.var(ddof=1)
+        theta = pos.var(ddof=1) / pos.mean()
+        tail = stats.gamma.sf(E_real, k, scale=theta) if E_real > 0 else 1.0
+        out["p_day_gamma"] = float((1 - frac0) * tail + (frac0 if E_real <= 0 else 0.0))
+    else:
+        out["p_day_gamma"] = np.nan
+    return out
+
+
 def day_statistic(table: pd.DataFrame) -> dict:
     """Combine a radar-day's evidence: E = sum over matched flights of -log10 of the
     flight's best streak p-value (a flight matched to the same echo in many scans counts
@@ -286,6 +309,7 @@ def day_statistic(table: pd.DataFrame) -> dict:
     E_all = np.array([-np.log10(per_flight_min_p(P, F, j)).sum() for j in range(R + 1)])
     E_real, E_null = float(E_all[0]), E_all[1:]
     return {"E": E_real, "p_day": float((1 + np.sum(E_null >= E_real)) / (1 + R)),
+            **tail_pvalues(E_real, E_null),
             "n_flights_matched": int(len(per_flight_min_p(P, F, 0))),
             "E_null_median": float(np.median(E_null)), "E_null_q95": float(np.quantile(E_null, 0.95)),
             "n_streaks": int(len(table)), "n_matched": int((C0 > 0).sum())}

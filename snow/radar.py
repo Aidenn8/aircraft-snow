@@ -39,8 +39,16 @@ def _list(bucket: str, prefix: str) -> list[tuple[str, int]]:
         params = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
         if token:
             params["continuation-token"] = token
-        r = _session.get(bucket + "/", params=params, timeout=60)
-        r.raise_for_status()
+        for attempt in range(5):
+            try:
+                r = _session.get(bucket + "/", params=params, timeout=60)
+                r.raise_for_status()
+                break
+            except requests.RequestException:
+                if attempt == 4:
+                    raise
+                import time
+                time.sleep(2 * (attempt + 1))
         root = ET.fromstring(r.content)
         for c in root.findall("s3:Contents", _NS):
             out.append((c.find("s3:Key", _NS).text, int(c.find("s3:Size", _NS).text)))
@@ -81,8 +89,16 @@ def fetch(bucket: str, key: str) -> pathlib.Path:
     if path.exists() and path.stat().st_size > 0:
         return path
     path.parent.mkdir(parents=True, exist_ok=True)
-    r = _session.get(f"{bucket}/{key}", timeout=180)
-    r.raise_for_status()
+    import time
+    for attempt in range(5):
+        try:
+            r = _session.get(f"{bucket}/{key}", timeout=180)
+            r.raise_for_status()
+            break
+        except requests.RequestException:
+            if attempt == 4:
+                raise
+            time.sleep(2 * (attempt + 1))
     tmp = path.with_suffix(path.suffix + ".part")
     tmp.write_bytes(r.content)
     tmp.rename(path)

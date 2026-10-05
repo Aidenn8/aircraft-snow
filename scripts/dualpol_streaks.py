@@ -51,7 +51,7 @@ def main():
             continue
         z = np.where(np.isnan(G.z[k]), streaks.FLOOR_DBZ, G.z[k])
         obj, lab = streaks.find_streaks(streaks.GridScan(G.t[k], xs, ys, z, np.isfinite(G.z[k])))
-        matched = S[np.isclose(S.t, G.t[k])].label.astype(int).tolist()
+        matched = S[np.abs(S.t - G.t[k]) < 1.0].label.astype(int).tolist()   # same scan (epoch s)
         if not matched:
             continue
         in_streak = np.isin(lab, matched)
