@@ -103,6 +103,21 @@ class Sweep:
     radar_lon: float
     radar_height: float          # metres above sea level (site elevation + feedhorn)
     vcp: int | None = None
+    duration_s: float | None = None   # sweep duration (Level III: product delta_time)
+    az_start: float | None = None     # azimuth of the first radial; WSR-88D rotates clockwise
+
+    def beam_time(self, az_deg):
+        """Seconds after self.time at which the beam pointed at azimuth az_deg.
+        Level II: from the recorded ray times; Level III: assumes uniform clockwise rotation
+        from az_start over duration_s (checked against Level II: 71 s vs 71.8 s, KFTG)."""
+        az = np.asarray(az_deg, float) % 360.0
+        if self.duration_s is not None and self.az_start is not None:
+            return ((az - self.az_start) % 360.0) / 360.0 * self.duration_s
+        order = np.argsort(self.azimuth)
+        a = self.azimuth[order]
+        rt = self.ray_time[order]
+        k = np.clip(np.searchsorted(a, az), 0, len(a) - 1)
+        return rt[k]
 
 
 def beam_height_ground_range(r, elev_deg, h0):
@@ -112,6 +127,43 @@ def beam_height_ground_range(r, elev_deg, h0):
     h = np.sqrt(r ** 2 + ka ** 2 + 2 * r * ka * np.sin(th)) - ka + h0
     s = ka * np.arcsin(r * np.cos(th) / (ka + h - h0))
     return h, s
+
+
+def sample(sweep: Sweep, x, y, moment: str = "REF", max_az_gap: float = 1.0):
+    """Nearest-gate value of a moment at plane coordinates (x east, y north, metres from
+    the radar). Returns NaN outside the sweep. The ground range is converted to slant
+    range by inverting the 4/3-earth geometry of the sweep's gates."""
+    x = np.asarray(x, float)
+    y = np.asarray(y, float)
+    s = np.hypot(x, y)
+    az = np.degrees(np.arctan2(x, y)) % 360.0
+    r = sweep.ranges[moment]
+    _, s_gates = beam_height_ground_range(r, sweep.elevation, sweep.radar_height)
+    dr = r[1] - r[0]
+    gate = np.rint(np.interp(s, s_gates, np.arange(len(r)), left=-1, right=len(r))).astype(int)
+    order = np.argsort(sweep.azimuth)
+    a_sorted = sweep.azimuth[order]
+    k = np.searchsorted(a_sorted, az)
+    k0 = (k - 1) % len(a_sorted)
+    k1 = k % len(a_sorted)
+    d0 = np.abs(((az - a_sorted[k0]) + 180) % 360 - 180)
+    d1 = np.abs(((az - a_sorted[k1]) + 180) % 360 - 180)
+    ray = np.where(d0 <= d1, order[k0], order[k1])
+    gap = np.minimum(d0, d1)
+    data = sweep.data[moment]
+    ok = (gate >= 0) & (gate < data.shape[1]) & (gap <= max_az_gap) & (s - s_gates[0] > -dr)
+    out = np.full(x.shape, np.nan, np.float32)
+    out[ok] = data[ray[ok], gate[ok]]
+    return out
+
+
+def to_grid(sweep: Sweep, half_width_m: float, res_m: float, moment: str = "REF"):
+    """Resample a sweep onto a square grid centred on the radar: returns (xs, ys, Z) with
+    Z[iy, ix] at (xs[ix], ys[iy])."""
+    xs = np.arange(-half_width_m, half_width_m + res_m / 2, res_m)
+    ys = xs.copy()
+    X, Y = np.meshgrid(xs, ys)
+    return xs, ys, sample(sweep, X, Y, moment)
 
 
 def read_level2(path, moments=("REF", "ZDR", "RHO", "VEL", "SW", "PHI")) -> list[Sweep]:
@@ -176,7 +228,9 @@ def read_level3(path) -> Sweep:
     edges = np.linspace(0.0, float(f.max_range), ngates + 1)
     rng = 0.5 * (edges[:-1] + edges[1:]) * 1000.0
     t = f.metadata["vol_time"].replace(tzinfo=dt.timezone.utc)
+    dur = f.metadata.get("delta_time")
     return Sweep(site=f.siteID, time=t, elevation=float(f.metadata.get("el_angle", np.nan)),
                  azimuth=az, ray_time=np.zeros(len(az)), ranges={"REF": rng},
                  data={"REF": values}, radar_lat=float(f.lat), radar_lon=float(f.lon),
-                 radar_height=float(f.height) * 0.3048, vcp=f.prod_desc.vcp)
+                 radar_height=float(f.height) * 0.3048, vcp=f.prod_desc.vcp,
+                 duration_s=float(dur) if dur else None, az_start=float(start[0]))

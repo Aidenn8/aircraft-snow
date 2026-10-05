@@ -26,6 +26,30 @@ def test_beam_height_half_degree_at_40km():
     assert abs(h[0] - (1709 + 349 + 94)) < 5
 
 
+def _synthetic_sweep():
+    az = (np.arange(720) * 0.5 + 0.25) % 360
+    r = 2125.0 + 250.0 * np.arange(400)
+    data = np.tile(np.arange(400, dtype=np.float32), (720, 1))     # value = gate index
+    data += (np.arange(720, dtype=np.float32) * 1000)[:, None]     # + 1000 * ray index
+    return radar.Sweep(site="TEST", time=None, elevation=0.5, azimuth=az, ray_time=np.zeros(720),
+                       ranges={"REF": r}, data={"REF": data}, radar_lat=40.0, radar_lon=-100.0,
+                       radar_height=300.0)
+
+
+def test_sample_recovers_ray_and_gate():
+    sw = _synthetic_sweep()
+    # point due east at ground range of gate 100 -> ray with azimuth 90.25 (index 180)
+    _, s = radar.beam_height_ground_range(sw.ranges["REF"], 0.5, 300.0)
+    v = radar.sample(sw, np.array([s[100]]), np.array([0.0]))
+    assert v[0] in (180 * 1000 + 100, 179 * 1000 + 100)
+    # due north-north-east at 30.1 deg -> ray 60 (30.25 deg), gate 40
+    th = np.radians(30.1)
+    v = radar.sample(sw, np.array([s[40] * np.sin(th)]), np.array([s[40] * np.cos(th)]))
+    assert v[0] == 60 * 1000 + 40
+    # beyond the last gate -> NaN
+    assert np.isnan(radar.sample(sw, np.array([s[-1] + 5000]), np.array([0.0]))[0])
+
+
 @pytest.mark.skipif(not (L2.exists() and L3.exists()), reason="sample radar files not cached")
 def test_level2_and_level3_lowest_sweep_agree():
     sweeps = radar.read_level2(L2, moments=("REF",))

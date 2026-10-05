@@ -31,9 +31,18 @@ def test_interp_profile_time_and_log_pressure():
     prof = pd.DataFrame({
         "run": [runs[0]] * 2 + [runs[1]] * 2,
         "p": [800, 700, 800, 700],
-        "t": [-10.0, -20.0, -12.0, -22.0],
+        "temp": [-10.0, -20.0, -12.0, -22.0],
     })
-    pts = pd.DataFrame({"t": [runs[0].timestamp() + 1800], "p_hpa": [np.sqrt(800 * 700)]})
-    out = flights.interp_profile_to_points(pts, prof, fields=("t",))
+    t_pt = runs[0].timestamp() + 1800
+    pts = pd.DataFrame({"t": [t_pt], "p_hpa": [np.sqrt(800 * 700)]})
+    out = flights.interp_profile_to_points(pts, prof, fields=("temp",))
     # halfway in time (-11 / -21) and halfway in log-pressure -> -16
-    assert np.isclose(out.t.iloc[0], -16.0)
+    assert np.isclose(out.temp.iloc[0], -16.0)
+    assert out.t.iloc[0] == t_pt  # point times untouched
+
+
+def test_interp_refuses_field_named_t():
+    import pytest
+    with pytest.raises(ValueError):
+        flights.interp_profile_to_points(pd.DataFrame({"t": [0.0], "p_hpa": [700.0]}),
+                                         pd.DataFrame({"run": [], "p": [], "t": []}), fields=("t",))

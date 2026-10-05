@@ -77,9 +77,12 @@ def flight_table(pos: pd.DataFrame, calls: pd.DataFrame | None = None) -> pd.Dat
 
 
 def interp_profile_to_points(points: pd.DataFrame, profiles: pd.DataFrame,
-                             fields=("t", "RH", "CLMR", "UGRD", "VGRD")) -> pd.DataFrame:
+                             fields=("temp", "RH", "CLMR", "UGRD", "VGRD")) -> pd.DataFrame:
     """Interpolate hourly HRRR profiles (columns run, p, fields) to each point's time and
-    pressure: linear in time between analyses and in log-pressure between levels."""
+    pressure: linear in time between analyses and in log-pressure between levels.
+    The points' own time column is `t` (epoch seconds), so no field may be called `t`."""
+    if "t" in fields:
+        raise ValueError("field name 't' would overwrite the point times")
     out = points.copy()
     runs = np.array(sorted(profiles.run.unique()))
     run_s = np.array([pd.Timestamp(r).timestamp() for r in runs])

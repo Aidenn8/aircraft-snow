@@ -102,7 +102,7 @@ def profile(run: dt.datetime, lat: float, lon: float, box: int = 0,
 
     With box > 0 the values are averaged over the (2 box + 1)^2 neighbouring points that
     fall inside the same tile (a 3 km point is noisy for cloud water).
-    Returns one row per pressure level; temperatures in C, mixing ratios in g/kg,
+    Returns one row per pressure level; temperature (column temp) in C, mixing ratios in g/kg,
     winds in m/s, VVEL in Pa/s, HGT in m.
     """
     run = run.replace(minute=0, second=0, microsecond=0)
@@ -124,7 +124,7 @@ def profile(run: dt.datetime, lat: float, lon: float, box: int = 0,
         rows.setdefault(p, {"p": p})[var] = val
     df = pd.DataFrame(sorted(rows.values(), key=lambda r: -r["p"]))
     if "TMP" in df:
-        df["t"] = df["TMP"] - 273.15
+        df["temp"] = df["TMP"] - 273.15
     for m in ("CLMR", "CIMIXR", "SNMR"):
         if m in df:
             df[m] = df[m] * 1000.0  # kg/kg -> g/kg
