@@ -63,7 +63,6 @@ def main():
     ap.add_argument("--site", default="KFTG")
     ap.add_argument("--day", default="2025-01-25")
     ap.add_argument("--census", default=str(ROOT / "data" / "census"))
-    ap.add_argument("--null-census", default=str(ROOT / "data" / "census_null"))
     ap.add_argument("--out", default=str(ROOT / "site" / "page_data.json"))
     a = ap.parse_args()
     ev = ROOT / "data" / "events" / a.site
@@ -103,15 +102,13 @@ def main():
         for name in ("calibration", "seeders", "by_type", "efficiency"):
             if (cen / f"{name}.csv").exists():
                 out["census"][name] = pd.read_csv(cen / f"{name}.csv").to_dict(orient="records")
-        # false alarms: warm null days whose p-value is at or below the census's selection cutoff
-        null_rd = pathlib.Path(a.null_census) / "radar_days.csv"
-        rd = pd.read_csv(cen / "radar_days.csv")
-        if null_rd.exists() and rd.event.any():
-            cutoff = float(rd.loc[rd.event, "p_final"].max())
-            nd = pd.read_csv(null_rd)
-            nt = nd[nd.screened_out.fillna("") == ""]
-            out["census"]["null"] = {"tested": int(len(nt)), "selected": int((nt.p_final <= cutoff).sum()),
-                                     "cutoff": cutoff}
+        # false alarms: warm null days scored against the census's fitted null (census_summary.py)
+        fit = cen / "null_fit.json"
+        if fit.exists():
+            nf = json.loads(fit.read_text())
+            if "null_days" in nf:
+                out["census"]["null"] = {"tested": nf["null_days"], "selected": nf["null_selected"],
+                                         "cutoff": nf["p_cutoff"], "fit": nf["fit"]}
     pathlib.Path(a.out).write_text(json.dumps(_clean(out), separators=(",", ":"), allow_nan=False))
     print(a.out, f"{pathlib.Path(a.out).stat().st_size / 1e3:.0f} kB")
 
