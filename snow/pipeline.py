@@ -305,6 +305,11 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
     summary["streaks_screen"] = dict(summary["streaks"])
     candidate = screen_passes(summary["streaks"])
     if candidate:
+        if save and not streak_table.empty:      # keep the screening table: rescoring needs it
+            out_dir.mkdir(parents=True, exist_ok=True)
+            sc = streak_table.copy()
+            sc["placebo_cov"] = sc.placebo_cov.map(lambda a: np.asarray(a, np.float32).tolist())
+            sc.to_parquet(out_dir / f"{day:%Y-%m-%d}_screen_streaks.parquet")
         streak_table = match_day(prep, CONFIRM_ANGLES, max_temp_c=tmax)
         summary["streaks"] = match.day_statistic(streak_table, CONFIRM_ANGLES)
         summary["streaks"]["n_rotations"] = len(CONFIRM_ANGLES)

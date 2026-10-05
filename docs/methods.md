@@ -206,10 +206,13 @@ A read-only review of the statistics and pipeline code found these, all fixed:
   near-copies, which deflated its evidence and so the null distribution of the day score.
   In a simulation with this structure the 200-rotation day p-value was <= 0.01 on 6.3% of
   null days. Now each set is compared only with sets at least 20 deg away, as the real one
-  is (match.comparable_sets); that brings it to 4.7%, and the gamma tail to 3.7%. The rest
-  is not a bug but a limit: there are only some 15-25 independent rotations, so no rotation
-  p-value below about 1/20 is exact. Census selection therefore uses an empirical null
-  (below), not the rotation p-value's tail.
+  is (match.comparable_sets), and every set's p-values are floored at the coarsest set's
+  resolution (the real set is compared with all 200 rotations, a rotation with ~175), so the
+  real set gains nothing from finer steps. In the same simulation the day's rank p-value is
+  then <= 0.01 on 1.7%, <= 0.05 on 4.0% and <= 0.1 on 5.7% of null days: valid, slightly
+  conservative. The gamma-tail extrapolation remains a little liberal (3.0% at 0.01).
+  There are only some 15-25 independent rotations per day, so census-wide selection, which
+  needs far smaller p-values than rotations can resolve, uses an empirical null (below).
 - F1 ties: placebo scores were stored in float32 and the real score compared in float64, so
   ties broke in the real set's favour. All comparisons are now in float32.
 - Injection recovery counted a match to any flight as a recovery; it now requires the

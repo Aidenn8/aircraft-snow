@@ -335,6 +335,12 @@ def pseudo_pvalues(table: pd.DataFrame, angles=None) -> np.ndarray:
             ge = (allc[:, others] >= c[:, None]).sum(axis=1)
             n_comp = int(others.sum())
         out[:, col] = np.where(c > 0, (1 + ge) / (1 + n_comp), 1.0)
+    if comp is not None:
+        # the real set is compared with all R rotations, a rotation only with those >= 20 deg
+        # away (fewer), so the smallest attainable p-values differ; floor every set at the
+        # coarsest one so the real set gains nothing from finer resolution
+        floor = 1.0 / (1 + int(comp.sum(axis=1).min()))
+        out = np.maximum(out, floor)
     return out
 
 
@@ -360,7 +366,7 @@ def per_flight_min_p(P: np.ndarray, F: np.ndarray, col: int) -> np.ndarray:
     return s.to_numpy()
 
 
-def empirical_fdr(table: pd.DataFrame, thresholds=(0.005, 0.01, 0.02, 0.05), angles=None) -> pd.DataFrame:
+def empirical_fdr(table: pd.DataFrame, thresholds=(0.01, 0.02, 0.05, 0.1), angles=None) -> pd.DataFrame:
     """For each p-value threshold: the number of real flights with a streak match at or
     below it (each flight counted once, by its best streak), the mean number the rotations
     produce when treated as real (false matches expected under 'no aircraft effect'), the
