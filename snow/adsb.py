@@ -75,16 +75,25 @@ def release_tags(year: int, refresh=False) -> set[str]:
 
 
 def release_parts(day: dt.date) -> tuple[str, list[str]]:
-    """Return (tag, [part urls in order]) for the preferred instance that published this day."""
-    repo = f"adsblol/globe_history_{day.year}"
+    """Return (tag, [part urls in order]) for the preferred instance that published this day.
+    A day is normally in its own year's repository, but releases made just after New Year
+    (31 December, for one) can sit in the next year's."""
     headers = {"Authorization": f"Bearer {_TOKEN}"} if _TOKEN else {}
-    tags = release_tags(day.year)
-    if not any(t.startswith(f"v{day:%Y.%m.%d}-") for t in tags):
-        tags = release_tags(day.year, refresh=True)
+    prefix = f"v{day:%Y.%m.%d}-"
+    years = [day.year] + ([day.year + 1] if day.month == 12 else [])
+    found = {}
+    for y in years:
+        tags = release_tags(y)
+        if not any(t.startswith(prefix) for t in tags):
+            tags = release_tags(y, refresh=True)
+        for t in tags:
+            if t.startswith(prefix):
+                found.setdefault(t, f"adsblol/globe_history_{y}")
     for inst in INSTANCES:
         tag = f"v{day:%Y.%m.%d}-planes-readsb-{inst}"
-        if tag not in tags:
+        if tag not in found:
             continue
+        repo = found[tag]
         r = _session.get(f"https://api.github.com/repos/{repo}/releases/tags/{tag}",
                          headers=headers, timeout=60)
         if r.status_code != 200:
