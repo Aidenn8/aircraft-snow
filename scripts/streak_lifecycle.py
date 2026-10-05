@@ -1,6 +1,6 @@
 """Composite life cycle of matched streaks: reflectivity across the drifted track versus age.
 
-usage: streak_lifecycle.py SITE YYYY-MM-DD [--alpha 0.005]
+usage: streak_lifecycle.py SITE YYYY-MM-DD [--alpha 0.01]
 
 For every streak matched at p <= alpha, the matched flight's seeding points (its points on
 the streak at the matched scan) are followed with the matched drift through every scan from
@@ -29,7 +29,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("site")
     ap.add_argument("day")
-    ap.add_argument("--alpha", type=float, default=0.005)
+    ap.add_argument("--alpha", type=float, default=0.01)
     a = ap.parse_args()
     day = dt.date.fromisoformat(a.day)
     ev = ROOT / "data" / "events" / a.site

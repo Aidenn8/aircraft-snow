@@ -79,7 +79,7 @@ def main():
             "E": s["streaks"]["E"], "E_null_median": s["streaks"]["E_null_median"],
             "E_null_q95": s["streaks"]["E_null_q95"], "p_day_gamma": s["streaks"]["p_day_gamma"],
             "n_rotations": s["streaks"]["n_rotations"],
-            "flights_p005": fdr.get(0.005, {}).get("n_real"), "expected_false_p005": fdr.get(0.005, {}).get("expected_false"),
+            "flights_p01": fdr.get(0.01, {}).get("n_real"), "expected_false_p01": fdr.get(0.01, {}).get("expected_false"),
             "p_rev": s.get("streaks_reverse", {}).get("p_day"),
             "aircraft": records(best, ["callsign", "icao_type", "engine_class", "phase", "pass_utc", "scan_utc",
                                        "age_min", "seed_alt_ft", "seed_temp_c", "seed_dh_m", "v_fall", "length_km",

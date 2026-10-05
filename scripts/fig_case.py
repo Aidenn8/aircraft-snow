@@ -2,7 +2,7 @@
 streaks (p <= alpha), and recent traffic for context.
 
 usage: fig_case.py SITE YYYY-MM-DD HH:MM [HH:MM ...] --out FIG.png
-       [--box x0,x1,y0,y1] [--alt 8000,13000] [--alpha 0.005] [--airport LAT,LON,NAME]
+       [--box x0,x1,y0,y1] [--alt 8000,13000] [--alpha 0.01] [--airport LAT,LON,NAME]
 """
 import argparse
 import datetime as dt
@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--box", default="-45,30,-48,27")
     ap.add_argument("--alt", default="8000,13000")
-    ap.add_argument("--alpha", type=float, default=0.005)
+    ap.add_argument("--alpha", type=float, default=0.01)
     ap.add_argument("--airport", default="")
     ap.add_argument("--title", default="")
     ap.add_argument("--cols", type=int, default=2)

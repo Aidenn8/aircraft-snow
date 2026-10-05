@@ -1,6 +1,6 @@
 """How far does the best-fitting drift of each confident match lie from the HRRR drift?
 
-usage: drift_check.py SITE YYYY-MM-DD [--alpha 0.005] [--max 3.0] [--step 0.25]
+usage: drift_check.py SITE YYYY-MM-DD [--alpha 0.01] [--max 3.0] [--step 0.25]
 
 Matching allows the HRRR drift to be wrong by up to +-1 m/s per component. If the best
 perturbation of many matches sits at that edge, the true drift error may be larger and
@@ -44,7 +44,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("site")
     ap.add_argument("day")
-    ap.add_argument("--alpha", type=float, default=0.005)
+    ap.add_argument("--alpha", type=float, default=0.01)
     ap.add_argument("--max", type=float, default=3.0)
     ap.add_argument("--step", type=float, default=0.25)
     a = ap.parse_args()

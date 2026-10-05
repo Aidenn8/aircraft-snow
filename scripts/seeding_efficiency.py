@@ -1,6 +1,6 @@
 """What share of aircraft crossing the seeding layer left a radar-visible streak?
 
-usage: seeding_efficiency.py SITE YYYY-MM-DD [--alpha 0.005] [--layer-ft 1000] [--pad-min 60]
+usage: seeding_efficiency.py SITE YYYY-MM-DD [--alpha 0.01] [--layer-ft 1000] [--pad-min 60]
 
 On an event day, the seeding layer and period are taken from the confident matches
 (p <= alpha): altitudes within --layer-ft of the matched seeding altitudes, passage times
@@ -30,7 +30,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("site")
     ap.add_argument("day")
-    ap.add_argument("--alpha", type=float, default=0.005)
+    ap.add_argument("--alpha", type=float, default=0.01)
     ap.add_argument("--layer-ft", type=float, default=1000.0)
     ap.add_argument("--pad-min", type=float, default=60.0)
     ap.add_argument("--f1", type=float, default=0.5)

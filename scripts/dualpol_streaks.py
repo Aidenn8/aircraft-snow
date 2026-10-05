@@ -1,6 +1,6 @@
 """Dual-polarisation signature of matched streaks versus other echo (Level II, lowest tilt).
 
-usage: dualpol_streaks.py SITE YYYY-MM-DD START END [--alpha 0.005]
+usage: dualpol_streaks.py SITE YYYY-MM-DD START END [--alpha 0.01]
 
 For each Level II volume in the window, the lowest sweep carrying ZDR and RHO is sampled
 at the pixels of streak objects matched at p <= alpha (from the nearest Level III scan),
@@ -25,7 +25,7 @@ def main():
     ap.add_argument("day")
     ap.add_argument("start")
     ap.add_argument("end")
-    ap.add_argument("--alpha", type=float, default=0.005)
+    ap.add_argument("--alpha", type=float, default=0.01)
     a = ap.parse_args()
     day = dt.date.fromisoformat(a.day)
     UTC = dt.timezone.utc

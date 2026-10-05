@@ -145,8 +145,8 @@
   function fillNumbers() {
     const c = data.case;
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-    set("n-flights", c.flights_p005);
-    set("n-expected", fmt(c.expected_false_p005, 1));
+    set("n-flights", c.flights_p01);
+    set("n-expected", fmt(c.expected_false_p01, 1));
     set("n-objects", c.n_streak_objects);
     set("e-real", fmt(c.E, 0));
     set("e-null", fmt(c.E_null_median, 0));

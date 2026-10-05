@@ -1,6 +1,6 @@
 """Census results: how often, where, which aircraft, at what temperatures.
 
-usage: census_analysis.py [--census data/census] [--events data/events] [--alpha 0.005]
+usage: census_analysis.py [--census data/census] [--events data/events] [--alpha 0.01]
 
 Reads census_summary.py's tables and, for each event day, the per-streak descriptions
 (describe_day.py, *_described.csv) and per-flight exposure tables (seeding_efficiency.py,
@@ -34,7 +34,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--census", default=str(ROOT / "data" / "census"))
     ap.add_argument("--events", default=str(ROOT / "data" / "events"))
-    ap.add_argument("--alpha", type=float, default=0.005)
+    ap.add_argument("--alpha", type=float, default=0.01)
     a = ap.parse_args()
     cen, evr = pathlib.Path(a.census), pathlib.Path(a.events)
     rd = pd.read_csv(cen / "radar_days.csv")

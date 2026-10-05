@@ -1,7 +1,7 @@
 """Export a radar-day window for the interactive replay: reflectivity frames as PNG (base64),
 flight tracks and matched streaks, in one JSON file.
 
-usage: export_replay.py SITE YYYY-MM-DD START END OUT.json [--alt 6000,14000] [--alpha 0.005]
+usage: export_replay.py SITE YYYY-MM-DD START END OUT.json [--alt 6000,14000] [--alpha 0.01]
 START/END are UTC times (HH:MM, END may be on the next day if earlier than START).
 """
 import argparse
@@ -44,7 +44,7 @@ def main():
     ap.add_argument("end")
     ap.add_argument("out")
     ap.add_argument("--alt", default="6000,14000")
-    ap.add_argument("--alpha", type=float, default=0.005)
+    ap.add_argument("--alpha", type=float, default=0.01)
     ap.add_argument("--airport", default="", help="LAT,LON,NAME")
     ap.add_argument("--tz-offset", type=float, default=0.0, help="local time minus UTC, hours")
     ap.add_argument("--tz", default="UTC")
