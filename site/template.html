@@ -1,0 +1,115 @@
+<title>Aircraft-Made Snow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an approach-chart page. A narrow reading column, with the radar replay as the one
+   framed instrument; thin rules and condensed labels, monospace for what aviation writes in code. */
+:root {
+  --bg: #f6f8fa;            /* paper, faintly cool */
+  --panel: #ffffff;
+  --ink: #0f1a24;
+  --ink-2: #44515d;
+  --muted: #7a8794;
+  --rule: #d9e0e6;
+  --seed: #e5612a;          /* seeding aircraft (same orange as the figures) */
+  --seed-path: #f0a582;
+  --traffic: #8a96a1;
+  --radar-bg: #fbfcfd;
+  --accent-ink: #1c5cab;    /* radar blue, for links and numbers */
+  /* reflectivity ramp, one hue: weak echo light, strong echo dark on the light page */
+  --r1: #cde2fb; --r2: #86b6ef; --r3: #3987e5; --r4: #1c5cab; --r5: #0d366b;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --font-ui: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --step-0: 1rem; --step-1: 1.25rem; --step-2: 1.6rem; --step-3: 2.4rem; --step-4: 3.4rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d141b; --panel: #121c25; --ink: #e9eef2; --ink-2: #b4c0ca; --muted: #7f8c97;
+    --rule: #24323e; --seed: #f07440; --seed-path: #9a5235; --traffic: #6f7d89;
+    --radar-bg: #101a22; --accent-ink: #86b6ef; color-scheme: dark;
+    --r1: #17345a; --r2: #1f5aa3; --r3: #3987e5; --r4: #86b6ef; --r5: #e4effc;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d141b; --panel: #121c25; --ink: #e9eef2; --ink-2: #b4c0ca; --muted: #7f8c97;
+  --rule: #24323e; --seed: #f07440; --seed-path: #9a5235; --traffic: #6f7d89;
+  --radar-bg: #101a22; --accent-ink: #86b6ef; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font: 400 var(--step-0)/1.6 var(--font-ui); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
+a { color: var(--accent-ink); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.01em; text-wrap: balance; margin: 0; }
+h1 { font-size: var(--step-4); line-height: 1.02; }
+h2 { font-size: var(--step-3); line-height: 1.1; }
+h3 { font-size: var(--step-2); line-height: 1.15; }
+p { margin: 0; max-width: 66ch; }
+.eyebrow { font: 500 0.78rem/1.2 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--font-mono); font-size: 0.92em; }
+section { display: grid; gap: 18px; padding-block: 44px; border-top: 1px solid var(--rule); }
+header.hero { display: grid; gap: 18px; padding-block: 8px 32px; }
+.lede { font-size: var(--step-1); line-height: 1.5; color: var(--ink-2); max-width: 60ch; }
+.replay-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .replay-grid { grid-template-columns: minmax(0, 1fr); } }
+.instrument { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; display: grid; gap: 10px; }
+#replay { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: 3px; image-rendering: pixelated; }
+.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.controls button { font: 600 0.9rem var(--font-ui); background: var(--ink); color: var(--panel); border: 0; border-radius: 4px; padding: 7px 16px; cursor: pointer; }
+.controls button:focus-visible, .seeders li:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.controls input[type=range] { flex: 1 1 200px; accent-color: var(--seed); min-width: 0; }
+#replay-clock { font: 500 0.95rem var(--font-mono); color: var(--ink); font-variant-numeric: tabular-nums; min-width: 17ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.82rem; color: var(--ink-2); align-items: center; }
+.key { display: inline-flex; align-items: center; gap: 7px; }
+.key i { display: inline-block; width: 22px; height: 3px; border-radius: 2px; background: var(--seed); }
+.key i.traffic { height: 1px; background: var(--traffic); }
+.key i.path { background: var(--seed-path); height: 2px; }
+.ramp { width: 120px; height: 9px; border-radius: 2px; background: linear-gradient(90deg, var(--r1), var(--r2), var(--r3), var(--r4), var(--r5)); }
+.side { display: grid; gap: 12px; min-width: 0; }
+.side p { font-size: 0.92rem; color: var(--ink-2); }
+.seeders { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 560px; overflow-y: auto; }
+.seeders li { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; padding: 8px 10px; border-radius: 4px; cursor: pointer; border-left: 3px solid transparent; }
+.seeders li:hover { background: var(--bg); }
+.seeders li.is-active { border-left-color: var(--seed); }
+.seeders .cs { font: 500 0.95rem var(--font-mono); }
+.seeders .ty { font: 500 0.95rem var(--font-mono); color: var(--muted); }
+.seeders .meta { grid-column: 1 / -1; font-size: 0.8rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.note { font-size: 0.85rem; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">KFTG radar · Denver International · 25 January 2025</div>
+    <h1>Aircraft-made snow</h1>
+    <p class="lede">On a cold evening near Denver, jets descending through a thin supercooled cloud
+      froze some of its droplets. The ice fell out as narrow bands of snow that traced their
+      flight paths on weather radar. {{HERO_SUMMARY}}</p>
+  </header>
+
+  <div class="replay-grid">
+    <div class="instrument">
+      <canvas id="replay" role="img" aria-label="Animated radar reflectivity near Denver with the tracks of aircraft and the drifted air of the aircraft matched to snow streaks"></canvas>
+      <div class="controls">
+        <button id="replay-play" type="button" aria-pressed="false">Play</button>
+        <input id="replay-time" type="range" min="0" max="1" value="0" aria-label="Radar scan time">
+        <span id="replay-clock"></span>
+      </div>
+      <div class="legend">
+        <span class="key"><span class="ramp" aria-hidden="true"></span> snow echo 0–35 dBZ</span>
+        <span class="key"><i aria-hidden="true"></i> air a seeding aircraft flew through, carried by the wind</span>
+        <span class="key"><i class="path" aria-hidden="true"></i> where it actually flew</span>
+        <span class="key"><i class="traffic" aria-hidden="true"></i> other traffic, last 30 min</span>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="eyebrow">Matched aircraft</div>
+      <p>Each was matched to a streak at p &le; 0.005 against 200 rotated copies of all the
+        evening's flights. Hover to highlight its air; select to jump to the match.</p>
+      <ul class="seeders" id="replay-seeders"></ul>
+      <p class="note">Times are when the aircraft passed through the cloud layer; temperatures are
+        the HRRR analysis at its altitude.</p>
+    </aside>
+  </div>
+</div>
+<script type="application/json" id="replay-data">{{REPLAY_JSON}}</script>
+<script>{{REPLAY_JS}}</script>

@@ -36,7 +36,8 @@ def main():
     S = pd.read_parquet(ev / f"{day}_streaks.parquet")
     S = S[(S.coverage > 0) & (S.p_value <= a.alpha)].sort_values("t").drop_duplicates("flight")
     prep = pipeline.prepare(a.site, day)
-    G, pts, dr = prep["grids"], prep["points_dense"], prep["drift_dense"]
+    G = prep["grids"]
+    pts, dr = pipeline.matching_points(prep)
     xs = G.x0 + G.res * np.arange(G.z.shape[2])
     ys = G.y0 + G.res * np.arange(G.z.shape[1])
     nA, nO = len(AGE_BINS) - 1, len(OFFSETS)

@@ -36,7 +36,8 @@ def main():
     S = pd.read_parquet(ev / f"{day}_streaks.parquet")
     S = S[(S.coverage > 0) & (S.p_value <= a.alpha)].copy()
     prep = pipeline.prepare(a.site, day)
-    G, pts, dr = prep["grids"], prep["points_dense"], prep["drift_dense"]
+    G = prep["grids"]
+    pts, dr = pipeline.matching_points(prep)
     calls = pd.concat([flights.load_calls(day, a.site), flights.load_calls(day + dt.timedelta(days=1), a.site)])
     ft = flights.flight_table(prep["positions"], calls)
     xs = G.x0 + G.res * np.arange(G.z.shape[2])

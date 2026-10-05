@@ -122,14 +122,21 @@ def streak_objects_day(prep: dict):
     return kept, persist, xs, ys
 
 
+def matching_points(prep: dict):
+    """Interpolated track points used for streak matching, and their drift. Slow points
+    (helicopters, hovering, slow general aviation: < MIN_MATCH_GS_KT) are excluded: their
+    tracks loop over small areas, so their drifted "lines" are blobs that fit any echo."""
+    pts, dr = prep["points_dense"], prep["drift_dense"]
+    gs = pts.gs.to_numpy()
+    fast = ~((gs >= 0) & (gs < MIN_MATCH_GS_KT * 10))
+    return pts[fast].reset_index(drop=True), dr[fast]
+
+
 def match_day(prep: dict, angles=SCREEN_ANGLES, reverse: bool = False) -> pd.DataFrame:
     """Streak objects in every scan of the day (fixed echoes removed), each matched to its
     best new flight with rotation placebos (reverse=True: the time-reversed diagnostic)."""
-    G, pts, dr = prep["grids"], prep["points_dense"], prep["drift_dense"]
-    # slow points (helicopters, hovering, slow general aviation: < 80 kt) are excluded: their
-    # tracks loop over small areas, so their drifted "lines" are blobs that fit any echo
-    fast = ~((pts.gs.to_numpy() >= 0) & (pts.gs.to_numpy() < MIN_MATCH_GS_KT * 10))
-    pts, dr = pts[fast].reset_index(drop=True), dr[fast]
+    G = prep["grids"]
+    pts, dr = matching_points(prep)
     kept, _, xs, ys = streak_objects_day(prep)
     rows = [match.match_streaks(G, G.t[k], lab, obj, xs, ys, pts, dr, angles=angles, reverse=reverse)
             for k, obj, lab in kept]

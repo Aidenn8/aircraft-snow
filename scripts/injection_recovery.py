@@ -27,7 +27,8 @@ BAND = (6000.0, 14000.0)
 
 def run_trials(site, day, n, peaks, rng):
     prep = pipeline.prepare(site, day)
-    G, pts, dr = prep["grids"], prep["points_dense"], prep["drift_dense"]
+    G = prep["grids"]
+    pts, dr = pipeline.matching_points(prep)
     xs = G.x0 + G.res * np.arange(G.z.shape[2])
     ys = G.y0 + G.res * np.arange(G.z.shape[1])
     rng_pts = np.hypot(pts.x, pts.y)

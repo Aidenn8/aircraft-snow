@@ -36,7 +36,8 @@ def main():
     x0, x1, y0, y1 = (float(v) for v in a.box.split(","))
     lo, hi = (float(v) for v in a.alt.split(","))
     prep = pipeline.prepare(a.site, day)
-    G, pts, dr = prep["grids"], prep["points_dense"], prep["drift_dense"]
+    G = prep["grids"]
+    pts, dr = pipeline.matching_points(prep)
     pos = prep["positions"]
     S = pd.read_parquet(ROOT / "data" / "events" / a.site / f"{day}_streaks.parquet")
     S = S[(S.coverage > 0) & (S.p_value <= a.alpha)]
