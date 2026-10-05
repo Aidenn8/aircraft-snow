@@ -156,11 +156,15 @@ rotation of 200 reached it (rank p < 0.005, gamma tail p = 2e-4). At p <= 0.005,
   (fall speed, 0.4-1.2 m/s, narrower than the detector's allowed range); nothing is
   visible before 10 min; the streak is 1.5-3.0 km wide above 3 dBZ when it appears (the
   widths of the detected Denver streaks) and widens at 0.2 m/s; HRRR wind error 0.7 m/s per
-  component. Recall (138 trials, 95% intervals): 10/33 at 5 dBZ peak (30%, 16-49%), 15/30 at
-  10 dBZ (50%, 31-69%), 19/34 at 15 dBZ (56%, 38-73%), 27/41 at 20 dBZ (66%, 49-80%). Most
-  trials were flights climbing or descending through the layer (88 of 105 at >= 10 dBZ
-  crossed more than 1000 ft of it), which leave shorter, sheared streaks: 55% of those
-  were recovered, against 77% of flights within 300-1000 ft and 3 of 4 near-level ones.
+  component; non-meteorological echo masked as in the census. Two measures (426 trials,
+  95% intervals): event recall, the injected streak matched to some flight at p <= 0.05,
+  and attribution, matched to the injected flight itself:
+  5 dBZ peak 16% (10-24%) / 13% (8-21%); 10 dBZ 52% (43-62%) / 45% (35-55%); 15 dBZ 60%
+  (50-69%) / 55% (45-64%); 20 dBZ 63% (52-72%) / 57% (46-67%). Of the recovered streaks,
+  11% were credited to another flight, typically one just ahead on the same path. Flights
+  that crossed the layer nearly level (less than 1000 ft of altitude change within it)
+  were recovered 71% of the time (65% attributed correctly); flights climbing or
+  descending through it, 56% (49%): their ice reaches the beam piece by piece.
 - Two earlier injection models were wrong in instructive ways. Injecting every point of a
   6 000-14 000 ft band on a fixed timetable (onset 15, peak 35 min) gave 85-95% recall, but
   ignored that ice from different heights reaches the beam at different times. Adding that

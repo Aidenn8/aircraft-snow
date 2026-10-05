@@ -4,8 +4,9 @@ usage: fig_calibration.py --inj A.parquet [B.parquet ...] --census data/census
        [--null-census data/census_null] --out FIG.png
 
 (a) Injection-recovery: share of synthetic streaks (injected along real flights' drifted
-    tracks into real radar on quiet days) found as a streak object, and matched back to
-    the right flight at p <= 0.05, by peak reflectivity, with 95% Clopper-Pearson intervals.
+    tracks into real radar on quiet days) found as a streak object, matched to some flight
+    at p <= 0.05 (event recall), and matched to the injected flight (attribution), by peak
+    reflectivity, with 95% Clopper-Pearson intervals.
 (b) Day-test calibration: for nominal levels, the share of p-values at or below the level,
     for the pooled leave-one-out rotation nulls of the census (does the gamma tail mean what
     it says?) and for real flights on summer null days (are real and rotated flights
@@ -49,8 +50,11 @@ def main():
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.5, 3.9), layout="constrained")
 
     peaks = np.sort(df.peak_dbz.unique())
-    for col, name, colour, dx in (("object_found", "found as a streak object", figstyle.MUTED, -0.35),
-                                  ("recovered", "matched to its flight, p ≤ 0.05", figstyle.BLUE, 0.35)):
+    series = [("object_found", "found as a streak object", figstyle.MUTED, -0.4)]
+    if "recovered_any" in df:
+        series.append(("recovered_any", "matched to a flight, p ≤ 0.05", figstyle.ORANGE, 0.0))
+    series.append(("recovered", "matched to the injected flight", figstyle.BLUE, 0.4))
+    for col, name, colour, dx in series:
         rows = []
         for pk in peaks:
             d = df[df.peak_dbz == pk]
