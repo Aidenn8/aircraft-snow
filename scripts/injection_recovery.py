@@ -101,6 +101,7 @@ def run_trials(site, day, n, peaks, rng):
             found_obj = True
             o = obj[obj.label.isin(labs)]
             m = match.match_streaks(Gi, T, lab, o, xs, ys, pts, dr)
+            m = m[m.flight == f]                 # a match to another flight is not a recovery
             if m.empty:
                 continue
             j = m.p_value.idxmin()

@@ -121,6 +121,7 @@ class Sweep:
     vcp: int | None = None
     duration_s: float | None = None   # sweep duration (Level III: product delta_time)
     az_start: float | None = None     # azimuth of the first radial; WSR-88D rotates clockwise
+    rho: "Sweep | None" = None        # Level III: the same scan's correlation coefficient (N0C)
 
     def beam_time(self, az_deg):
         """Seconds after self.time at which the beam pointed at azimuth az_deg.
@@ -227,8 +228,9 @@ def read_level2(path, moments=("REF", "ZDR", "RHO", "VEL", "SW", "PHI")) -> list
     return out
 
 
-def read_level3(path) -> Sweep:
-    """Read a Level III radial product (e.g. N0B) into a Sweep with moment 'REF'."""
+def read_level3(path, moment: str = "REF") -> Sweep:
+    """Read a Level III radial product (e.g. N0B reflectivity, N0C correlation coefficient)
+    into a Sweep with the given moment name."""
     from metpy.io import Level3File
 
     f = Level3File(str(path))
@@ -246,7 +248,7 @@ def read_level3(path) -> Sweep:
     t = f.metadata["vol_time"].replace(tzinfo=dt.timezone.utc)
     dur = f.metadata.get("delta_time")
     return Sweep(site=f.siteID, time=t, elevation=float(f.metadata.get("el_angle", np.nan)),
-                 azimuth=az, ray_time=np.zeros(len(az)), ranges={"REF": rng},
-                 data={"REF": values}, radar_lat=float(f.lat), radar_lon=float(f.lon),
+                 azimuth=az, ray_time=np.zeros(len(az)), ranges={moment: rng},
+                 data={moment: values}, radar_lat=float(f.lat), radar_lon=float(f.lon),
                  radar_height=float(f.height) * 0.3048, vcp=f.prod_desc.vcp,
                  duration_s=float(dur) if dur else None, az_start=float(start[0]))

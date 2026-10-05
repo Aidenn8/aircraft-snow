@@ -29,7 +29,8 @@ def main():
     day = dt.date.fromisoformat(a.day)
     ev_dir = ROOT / "data" / "events" / a.site
     summ = json.loads((ev_dir / f"{day}.json").read_text())
-    acc = np.load(ev_dir / f"{day}_acc.npz")
+    acc_path = ev_dir / f"{day}_acc.npz"            # the event test's output (not run in the census)
+    acc = np.load(acc_path) if acc_path.exists() else None
     st_path = ev_dir / f"{day}_streaks.parquet"
     S = pd.read_parquet(st_path) if st_path.exists() else pd.DataFrame()
     prep = pipeline.prepare(a.site, day)
@@ -45,9 +46,9 @@ def main():
     rows = 1 + int(np.ceil(max(n_top, 1) / cols))
     fig = plt.figure(figsize=(4.5 * cols, 4.4 * rows))
     # z-map of the primary statistic and of the new-echo statistic
-    edges = acc["band_edges"]
-    t0 = float(acc["t_start"])
-    for i, stat in enumerate(("z", "new")):
+    for i, stat in enumerate(("z", "new") if acc is not None else ()):
+        edges = acc["band_edges"]
+        t0 = float(acc["t_start"])
         ax = fig.add_subplot(rows, cols, 1 + i)
         zm = acc[f"zmap_{stat}"]
         im = ax.imshow(zm, origin="lower", aspect="auto", cmap="RdBu_r", vmin=-4, vmax=4,

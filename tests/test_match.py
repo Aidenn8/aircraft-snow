@@ -122,6 +122,45 @@ def test_shift_placebos_preserve_orientation_and_exceed_reach():
     assert np.allclose([rx[1], ry[1]], [-1000.0, 1000.0])
 
 
+def test_comparable_sets_exclude_near_copies():
+    angles = (20.0, 21.6, 23.2, 180.0, 340.0)
+    comp = match.comparable_sets(angles)
+    assert comp.shape == (6, 6) and not comp.diagonal().any()
+    assert comp[0, 1:].all()                       # the real set is >= 20 deg from every rotation
+    assert not comp[1, 2] and not comp[1, 3]       # 1.6 and 3.2 deg apart: near-copies
+    assert comp[1, 4] and comp[1, 0]               # 160 deg away, and the real set
+    assert comp[5, 1]                              # 340 and 20 are 40 deg apart (circular)
+    assert match.comparable_sets(None) is None
+
+
+def test_exclusion_restores_comparability():
+    """A rotation scored as real against its own near-copies looks weaker than it is; with the
+    exclusion zone its pseudo p-value is computed like the real set's."""
+    angles = (20.0, 21.6, 60.0, 100.0, 140.0, 180.0, 220.0, 260.0, 300.0)
+    # one streak matched only around 20 deg: rotations at 20 and 21.6 both fit it well
+    t = _table(np.array([0.0]), np.array([[0.9, 0.88, 0, 0, 0, 0, 0, 0, 0]]))
+    p_all = match.pseudo_pvalues(t)
+    p_ex = match.pseudo_pvalues(t, angles)
+    # the rotation at 21.6 deg (F1 0.88) is beaten by its near-copy at 20 deg (0.90)
+    assert np.isclose(p_all[0, 2], 2 / 10)
+    # with the exclusion zone it is compared only with sets >= 20 deg away (8 of them)
+    assert np.isclose(p_ex[0, 2], 1 / 9) and np.isclose(p_ex[0, 1], 1 / 9)
+
+
+def test_newness_ignores_scans_that_did_not_see_the_air():
+    from snow import event
+    res = 500.0
+    xs = np.arange(-20e3, 20e3 + res / 2, res)
+    times = np.array([0.0, 300.0, 600.0, 900.0, 1200.0])
+    z = np.full((5, len(xs), len(xs)), -10.0, np.float32)
+    z[:3] = np.nan                                  # the early scans had no data there
+    g = event.Grids(times, z, float(xs[0]), float(xs[0]), res)
+    sx = np.linspace(-5e3, 5e3, 21)
+    sy = np.zeros(21)
+    q, n = match.newness(g, sx, sy, T=1200.0, t_pass=1000.0, u=0.0, v=0.0)
+    assert n == 0                                   # no scan in the window saw the air
+
+
 def test_fall_ok_bounds():
     age = 30 * 60.0
     bw = 200.0

@@ -82,6 +82,9 @@ def densify(points: pd.DataFrame, step_m: float = 250.0, max_gap_s: float = 60.0
     p = points.sort_values(["flight", "t"])
     fl = p.flight.to_numpy()
     cols = {c: p[c].to_numpy(float) for c in columns if c in p}
+    if "gs" in cols:
+        # gs < 0 means unknown speed; interpolating through it would invent slow points
+        cols["gs"] = np.where(cols["gs"] < 0, np.nan, cols["gs"])
     src = p.index.to_numpy()
     same = (fl[1:] == fl[:-1]) & (np.diff(cols["t"]) <= max_gap_s)
     dist = np.hypot(np.diff(cols["x"]), np.diff(cols["y"]))

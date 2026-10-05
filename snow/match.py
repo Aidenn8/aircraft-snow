@@ -189,13 +189,13 @@ def newness(grids, sx, sy, T, t_pass, u, v):
     for k in sel:
         dtk = T - grids.t[k]
         z = grids.lookup(k, sx - u * dtk, sy - v * dtk)
-        vals.append(z[np.isfinite(z)])
+        z = z[np.isfinite(z)]
+        if len(z) >= max(3, len(sx) // 4):          # a scan counts only where it saw the air
+            vals.append(z)
     if not vals:
         return np.nan, 0
     allv = np.concatenate(vals)
-    if allv.size == 0:
-        return np.nan, 0
-    return float(np.mean(allv < QUIET_DBZ)), len(sel)
+    return float(np.mean(allv < QUIET_DBZ)), len(vals)
 
 
 def best_new_match(grids, sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None,
@@ -225,7 +225,7 @@ def matched_points(sx, sy, points: pd.DataFrame, drift: np.ndarray, T: float, fl
     f = (points.flight.to_numpy() == flight)
     age = T - points.t.to_numpy(float)
     a0, a1 = age_window(reverse)
-    m = f & (age >= a0) & (age <= a1) & _physical_mask(points, age, max_temp_c)
+    m = f & (age >= a0) & (age <= a1) & np.isfinite(drift[:, 0]) & _physical_mask(points, age, max_temp_c)
     p = points[m]
     px = p.x.to_numpy() + (drift[m, 0] + du) * age[m]
     py = p.y.to_numpy() + (drift[m, 1] + dv) * age[m]
@@ -293,18 +293,48 @@ def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
     return pd.DataFrame(rows)
 
 
-def pseudo_pvalues(table: pd.DataFrame) -> np.ndarray:
+EXCLUDE_DEG = 20.0       # no placebo rotation is closer than this to the real flights
+
+
+def comparable_sets(angles, exclude_deg: float = EXCLUDE_DEG) -> np.ndarray | None:
+    """Which sets each set is compared with when it is treated as the real one: column 0 is
+    the real set (angle 0), columns 1..R the rotations by `angles`. The real set has no
+    rotation within exclude_deg of it, while each rotation has close neighbours that are
+    near-copies of it (1.6 deg moves a track at 50 km by 1.4 km, less than a match can
+    absorb); scoring a rotation against its near-copies would deflate its evidence and make
+    the null too easy to beat. So a set is compared only with sets at least exclude_deg away,
+    as the real one is. None (no angles, e.g. day-swap or shift placebos): every set with
+    every other."""
+    if angles is None:
+        return None
+    th = np.r_[0.0, np.asarray(angles, float)]
+    d = np.abs((th[:, None] - th[None, :] + 180.0) % 360.0 - 180.0)
+    return d >= exclude_deg - 1e-9
+
+
+def pseudo_pvalues(table: pd.DataFrame, angles=None) -> np.ndarray:
     """p-values of every streak for the real set (column 0) and for each rotation treated
-    as if it were real (columns 1..R), each against all the other sets. Shape (n, R + 1)."""
-    C0 = table.coverage.to_numpy(float)
-    CP = np.stack(table.placebo_cov.to_numpy()).astype(float)
+    as if it were real (columns 1..R), each against the other sets it is comparable with
+    (comparable_sets; all others when angles is None). Shape (n, R + 1). F1 values are
+    compared in float32, the precision the placebo scores are stored in, so ties are ties."""
+    C0 = table.coverage.to_numpy(float).astype(np.float32)
+    CP = np.stack(table.placebo_cov.to_numpy()).astype(np.float32)
     allc = np.concatenate([C0[:, None], CP], axis=1)
     R = CP.shape[1]
-    out = np.ones_like(allc)
+    comp = comparable_sets(angles)
+    if comp is not None and comp.shape[0] != R + 1:
+        raise ValueError(f"{len(angles)} angles for {R} placebo sets")
+    out = np.ones(allc.shape, float)
     for col in range(R + 1):
         c = allc[:, col]
-        ge = (allc >= c[:, None]).sum(axis=1) - 1
-        out[:, col] = np.where(c > 0, (1 + ge) / (1 + R), 1.0)
+        if comp is None:
+            ge = (allc >= c[:, None]).sum(axis=1) - 1
+            n_comp = R
+        else:
+            others = comp[col]
+            ge = (allc[:, others] >= c[:, None]).sum(axis=1)
+            n_comp = int(others.sum())
+        out[:, col] = np.where(c > 0, (1 + ge) / (1 + n_comp), 1.0)
     return out
 
 
@@ -330,12 +360,12 @@ def per_flight_min_p(P: np.ndarray, F: np.ndarray, col: int) -> np.ndarray:
     return s.to_numpy()
 
 
-def empirical_fdr(table: pd.DataFrame, thresholds=(0.005, 0.01, 0.02, 0.05)) -> pd.DataFrame:
+def empirical_fdr(table: pd.DataFrame, thresholds=(0.005, 0.01, 0.02, 0.05), angles=None) -> pd.DataFrame:
     """For each p-value threshold: the number of real flights with a streak match at or
     below it (each flight counted once, by its best streak), the mean number the rotations
     produce when treated as real (false matches expected under 'no aircraft effect'), the
     implied false discovery rate and the estimated number of genuinely seeding flights."""
-    P = pseudo_pvalues(table)
+    P = pseudo_pvalues(table, angles)
     F = flight_matrix(table)
     R = P.shape[1] - 1
     mins = [per_flight_min_p(P, F, j) for j in range(R + 1)]
@@ -374,7 +404,7 @@ def tail_pvalues(E_real: float, E_null: np.ndarray) -> dict:
     return out
 
 
-def day_statistic(table: pd.DataFrame) -> dict:
+def day_statistic(table: pd.DataFrame, angles=None) -> dict:
     """Combine a radar-day's evidence: E = sum over matched flights of -log10 of the
     flight's best streak p-value (a flight matched to the same echo in many scans counts
     once).
@@ -382,11 +412,13 @@ def day_statistic(table: pd.DataFrame) -> dict:
     Null: under 'no aircraft effect' the real flight set is exchangeable with the rotated
     ones, so each rotation in turn is treated as the real set and scored against the other
     rotations plus the real set; its E is computed the same way. The day's p-value is
-    (1 + number of rotations with E >= real E) / (1 + number of rotations)."""
+    (1 + number of rotations with E >= real E) / (1 + number of rotations). With the
+    rotation angles given, each set is scored only against sets at least EXCLUDE_DEG away
+    (comparable_sets), as the real one is."""
     if table.empty:
         return {"E": 0.0, "p_day": 1.0, "n_streaks": 0, "n_matched": 0}
     C0 = table.coverage.to_numpy(float)
-    P = pseudo_pvalues(table)                     # column 0 real, 1..R rotations as if real
+    P = pseudo_pvalues(table, angles)             # column 0 real, 1..R rotations as if real
     F = flight_matrix(table)
     R = P.shape[1] - 1
     E_all = np.array([-np.log10(per_flight_min_p(P, F, j)).sum() for j in range(R + 1)])

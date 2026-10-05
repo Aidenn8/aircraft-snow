@@ -46,6 +46,7 @@ MIN_COUNT = 50
 ROTATION_CHUNK = 32
 PLACEBO_ANGLES = tuple(np.arange(20.0, 340.1, 2.0))   # 161 rotations, none within 20 deg
 AIRCRAFT_MASK_M = 1500.0
+RHO_MIN = 0.90            # correlation coefficient below this: not precipitation (Level III N0C)
 AIRCRAFT_MATCH_S = 15.0   # positions this close in time to the beam's passage are masked
 
 
@@ -91,6 +92,12 @@ class Grids:
             t, sw = scans[i]
             z = radar.sample(sw, X, Y)
             zf = np.where(np.isnan(z), FLOOR_DBZ, np.maximum(z, FLOOR_DBZ)).astype(np.float32)
+            if getattr(sw, "rho", None) is not None:
+                # birds, insects, ground clutter, wind turbines and anomalous propagation have
+                # a low correlation coefficient; snow and rain are near 1. Such echo counts as
+                # no echo (where the coefficient is missing, the reflectivity is kept)
+                r = radar.sample(sw.rho, X, Y, "RHO")
+                zf[np.isfinite(r) & (r < RHO_MIN)] = FLOOR_DBZ
             zf[bad] = np.nan
             if aircraft is not None:
                 dur = sw.duration_s or 60.0

@@ -38,19 +38,30 @@ def day_window(day: dt.date):
     return t0, t0 + dt.timedelta(hours=24)
 
 
-def load_scans(site: str, t_a: dt.datetime, t_b: dt.datetime):
+def load_scans(site: str, t_a: dt.datetime, t_b: dt.datetime, rho: bool = True):
+    """Level III lowest-tilt reflectivity scans (N0B) between t_a and t_b, each with the same
+    scan's correlation coefficient (N0C) attached as Sweep.rho when available."""
     site3 = site[1:] if len(site) == 4 else site
-    files = []
+    files, rho_files = [], {}
     d = t_a.date()
     while d <= t_b.date():
         files += [f for f in radar.list_level3(site3, "N0B", d) if t_a <= f[0] <= t_b]
+        if rho:
+            rho_files.update({f[0]: f[1] for f in radar.list_level3(site3, "N0C", d) if t_a <= f[0] <= t_b})
         d += dt.timedelta(days=1)
     scans = []
     for t, key, _ in files:
         try:
-            scans.append((t.timestamp(), radar.read_level3(radar.fetch(radar.L3_BUCKET, key))))
+            sw = radar.read_level3(radar.fetch(radar.L3_BUCKET, key))
         except Exception as e:      # an occasional corrupt file should not stop the day
             print(f"  skip {key}: {e!r}")
+            continue
+        if t in rho_files:
+            try:
+                sw.rho = radar.read_level3(radar.fetch(radar.L3_BUCKET, rho_files[t]), moment="RHO")
+            except Exception as e:
+                print(f"  no RHO for {key}: {e!r}")
+        scans.append((t.timestamp(), sw))
     return scans
 
 
@@ -213,7 +224,8 @@ def drop_radar_cache(site: str, day: dt.date):
     lo, hi = t0 - dt.timedelta(minutes=30), t1 + dt.timedelta(minutes=60)
     n = 0
     for d in {lo.date(), hi.date()}:
-        for p in (radar.CACHE / "l3").glob(f"{site3}_N0B_{d:%Y_%m_%d}_*"):
+        for p in [*(radar.CACHE / "l3").glob(f"{site3}_N0B_{d:%Y_%m_%d}_*"),
+                  *(radar.CACHE / "l3").glob(f"{site3}_N0C_{d:%Y_%m_%d}_*")]:
             t = dt.datetime.strptime(p.name[-19:], "%Y_%m_%d_%H_%M_%S").replace(tzinfo=UTC)
             if lo <= t <= hi:
                 p.unlink()
@@ -286,7 +298,7 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
     tmax = None if null else match.T_SEED_MAX_C
     summary["max_temp_c"] = tmax
     streak_table = match_day(prep, SCREEN_ANGLES, max_temp_c=tmax)
-    summary["streaks"] = match.day_statistic(streak_table)
+    summary["streaks"] = match.day_statistic(streak_table, SCREEN_ANGLES)
     summary["streaks"]["n_rotations"] = len(SCREEN_ANGLES)
     # the screening result is kept for every day: it is the one statistic computed the same
     # way on all days, so census-level selection uses it (census_summary.py)
@@ -294,16 +306,16 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
     candidate = screen_passes(summary["streaks"])
     if candidate:
         streak_table = match_day(prep, CONFIRM_ANGLES, max_temp_c=tmax)
-        summary["streaks"] = match.day_statistic(streak_table)
+        summary["streaks"] = match.day_statistic(streak_table, CONFIRM_ANGLES)
         summary["streaks"]["n_rotations"] = len(CONFIRM_ANGLES)
         if not streak_table.empty:
-            summary["streaks"]["fdr"] = match.empirical_fdr(streak_table).to_dict(orient="records")
+            summary["streaks"]["fdr"] = match.empirical_fdr(streak_table, angles=CONFIRM_ANGLES).to_dict(orient="records")
     # time-reversed diagnostic, on candidate days only (it costs as much as the screen):
     # aircraft that pass 10-50 min AFTER each scan cannot have made its echoes; their excess
     # over rotations measures alignment with traffic corridors that is not caused by seeding
     if candidate or reverse_all:
         summary["streaks_reverse"] = match.day_statistic(match_day(prep, SCREEN_ANGLES, reverse=True,
-                                                                   max_temp_c=tmax))
+                                                                   max_temp_c=tmax), SCREEN_ANGLES)
     if save and not streak_table.empty:
         out_dir.mkdir(parents=True, exist_ok=True)
         st = streak_table.copy()
