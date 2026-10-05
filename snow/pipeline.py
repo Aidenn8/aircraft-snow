@@ -271,7 +271,18 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
             out_dir.mkdir(parents=True, exist_ok=True)
             summ_path.write_text(json.dumps(summary, indent=1, default=float))
         return summary
-    prep = prepare(site, day, alt_max_ft=null_alt_max_ft)
+    try:
+        prep = prepare(site, day, alt_max_ft=null_alt_max_ft)
+    except RuntimeError as e:
+        if "radar scans" not in str(e):
+            raise
+        # a radar outage (the archive has no scans): record the day as untested
+        summary = {"site": site, "day": f"{day}", "screened_out": "no radar data", "cold_moist": cm,
+                   "seconds": round(time.time() - tic, 1)}
+        if save:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            summ_path.write_text(json.dumps(summary, indent=1, default=float))
+        return summary
     ep = screen.echo_present(prep["grids"])
     if not ep["pass"] and not null:
         summary = {"site": site, "day": f"{day}", "screened_out": "no echo",
