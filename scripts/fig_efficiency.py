@@ -39,6 +39,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--bins", default="-26,-20,-17,-14,-11,-8,-4")
     ap.add_argument("--min-n", type=int, default=8)
+    ap.add_argument("--title", default="Aircraft that left a streak, by temperature")
     a = ap.parse_args()
     figstyle.apply()
     df = pd.concat([pd.read_csv(p).assign(source=pathlib.Path(p).name) for p in a.exposure], ignore_index=True)
@@ -58,6 +59,7 @@ def main():
 
     fig, ax = plt.subplots(figsize=(6.8, 4.0), layout="constrained")
     styles = {"jet": (figstyle.BLUE, "o", -0.25), "turboprop": (figstyle.ORANGE, "s", 0.25)}
+    top = 0.5
     for cls, (col, mk, dx) in styles.items():
         t = tab[(tab.engine_class == cls) & (tab.n >= a.min_n)]
         if t.empty:
@@ -66,16 +68,19 @@ def main():
                     ms=7, capsize=0, elinewidth=1.4, label=f"{cls}s, left a streak")
         ax.plot(t.t_mid + dx, t.chance, mk, mfc="none", mec=col, ms=7, mew=1.3, alpha=0.8,
                 label=f"{cls}s, chance (rotated)")
+        top = max(top, float(t.ci_hi.max()) + 0.12)
         for _, r in t.iterrows():
             ax.annotate(f"n={r.n}", (r.t_mid + dx, r.ci_hi), textcoords="offset points", xytext=(0, 4),
                         ha="center", fontsize=7.5, color=figstyle.MUTED)
     ax.set_xlim(edges[0], edges[-1])
-    ax.set_ylim(0, 1.0)
+    ax.set_ylim(0, min(top, 1.0))
     ax.invert_xaxis()
     ax.set_xlabel("HRRR temperature where the aircraft crossed the layer (°C)")
     ax.set_ylabel("share of first passages")
-    ax.set_title("Aircraft that left a streak, by temperature")
-    ax.legend(loc="upper left")
+    ax.set_title(a.title)
+    h, lab = ax.get_legend_handles_labels()
+    order = sorted(range(len(lab)), key=lambda i: ("chance" in lab[i], lab[i]))
+    ax.legend([h[i] for i in order], [lab[i] for i in order], loc="upper left")
     fig.savefig(a.out)
     print(a.out)
 

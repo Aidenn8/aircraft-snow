@@ -30,6 +30,7 @@ def main():
     ap.add_argument("--alpha", type=float, default=0.005)
     ap.add_argument("--airport", default="")
     ap.add_argument("--title", default="")
+    ap.add_argument("--cols", type=int, default=2)
     a = ap.parse_args()
     figstyle.apply()
     day = dt.date.fromisoformat(a.day)
@@ -49,8 +50,11 @@ def main():
         la, lo_, name = a.airport.split(",")
         ax_, ay_ = geo.to_xy(float(la), float(lo_), prep["sweep0"].radar_lat, prep["sweep0"].radar_lon)
         ap_xy = (float(ax_) / 1e3, float(ay_) / 1e3, name)
+    desc_path = ROOT / "data" / "events" / a.site / f"{day}_described.csv"
+    desc = pd.read_csv(desc_path) if desc_path.exists() else pd.DataFrame(columns=["flight"])
+    names = {int(r.flight): f"{r.callsign} ({r.icao_type})" for _, r in desc.iterrows()}
     n = len(a.times)
-    cols = 2 if n > 1 else 1
+    cols = min(a.cols, n)
     rows = int(np.ceil(n / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(5.0 * cols + 1.2, 4.7 * rows + 0.6), squeeze=False,
                              layout="constrained")
@@ -69,7 +73,8 @@ def main():
         for _, g in w.groupby("flight"):
             ax.plot(g.x / 1e3, g.y / 1e3, color=figstyle.MUTED, lw=0.5, alpha=0.55)
         # matched flights at this scan: their seeding points drifted to the scan time
-        here = S[np.abs(S.t - Tk) < 1.0]          # same scan (epoch seconds)
+        here = S[(np.abs(S.t - Tk) < 1.0)          # same scan (epoch seconds), inside the panel
+                 & (S.x / 1e3 > x0) & (S.x / 1e3 < x1) & (S.y / 1e3 > y0) & (S.y / 1e3 < y1)]
         zz = np.where(np.isnan(z), streaks.FLOOR_DBZ, z)
         obj, lab = streaks.find_streaks(streaks.GridScan(Tk, xs, ys, zz, np.isfinite(z)))
         for _, o in here.iterrows():
@@ -94,7 +99,9 @@ def main():
         ax.set_xlim(x0, x1)
         ax.set_ylim(y0, y1)
         local = pd.Timestamp(Tk, unit="s", tz="UTC")
-        ax.set_title(f"{local:%H:%M} UTC  ({len(here)} matched streak{'s' if len(here) != 1 else ''})")
+        who = "; ".join(f"{names.get(int(o.flight), 'flight')}, {o.age_s / 60:.0f} min after passing"
+                        for _, o in here.iterrows())
+        ax.set_title(f"{local:%H:%M} UTC" + (f"  {who}" if who else ""), fontsize=10)
     for ax in axes.flat[n:]:
         ax.axis("off")
     cb = fig.colorbar(im, ax=axes, shrink=0.5, pad=0.01, extend="max")
