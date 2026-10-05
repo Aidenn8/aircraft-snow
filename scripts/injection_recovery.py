@@ -12,11 +12,14 @@ of the flight's points, chosen at random, and only the flight's points inside it
 trial needs at least MIN_DENSE of them (10 km of track), otherwise another flight is drawn.
 A flight crossing the layer level leaves a long streak, one descending through it a short
 one, as in nature. A streak (snow.inject, physical timing) is added along the seeding
-points' drifted track, with peak reflectivity from --peaks and a width when it appears drawn from WIDTH_M
-(the widths of the detected Denver streaks; so this is recall for streaks shaped like those). The streak detector and single-flight matcher
-(with rotation placebos) are then run on the scans 10-60 min after the flight's passage. A
-trial is recovered when some streak object overlapping the injected streak's footprint is
-matched with p <= ALPHA. Results go to data/injection/SITE_DAYS_sSEED.parquet.
+points' drifted track, with peak reflectivity from --peaks and a width when it appears
+drawn from WIDTH_M (the widths of the detected Denver streaks; so this is recall for streaks
+shaped like those). The streak detector and single-flight matcher (with rotation placebos)
+are then run on the scans 10-60 min after the flight's passage. A trial is recovered_any
+when a streak object overlapping the injected streak's footprint is matched to some flight
+with p <= ALPHA (event recall), and recovered when it is matched to the injected flight
+itself (attribution; in a stream of aircraft on one path, one just ahead can take the
+match). Results go to data/injection/SITE_DAYS_sSEED.parquet.
 """
 import argparse
 import datetime as dt
@@ -79,7 +82,7 @@ def run_trials(site, day, n, peaks, rng):
         arr = fp.dh.to_numpy() / v
         t_pass = float(fp.t.median())
         scans = np.nonzero((Gi.t >= t_pass + 10 * 60) & (Gi.t <= t_pass + 60 * 60))[0]
-        best_p, best_cov, found_obj = 1.0, 0.0, False
+        best_p, best_cov, found_obj, best_any = 1.0, 0.0, False, 1.0
         for k in scans:
             T = Gi.t[k]
             z = np.where(np.isnan(Gi.z[k]), streaks.FLOOR_DBZ, Gi.z[k])
@@ -100,8 +103,12 @@ def run_trials(site, day, n, peaks, rng):
                 continue
             found_obj = True
             o = obj[obj.label.isin(labs)]
-            m = match.match_streaks(Gi, T, lab, o, xs, ys, pts, dr)
-            m = m[m.flight == f]                 # a match to another flight is not a recovery
+            m_all = match.match_streaks(Gi, T, lab, o, xs, ys, pts, dr)
+            # the streak found and matched to some flight (event recall) ...
+            if not m_all.empty:
+                best_any = min(best_any, float(m_all.p_value.min()))
+            # ... and to the injected flight itself (attribution)
+            m = m_all[m_all.flight == f] if not m_all.empty else m_all
             if m.empty:
                 continue
             j = m.p_value.idxmin()
@@ -114,7 +121,8 @@ def run_trials(site, day, n, peaks, rng):
                      "alt_range_ft": float(fp.alt_ft.max() - fp.alt_ft.min()),
                      "dh_m": float(fp.dh.median()), "temp_c": float(fp.temp_c.median()),
                      "wind_err_u": err[0], "wind_err_v": err[1], "object_found": found_obj,
-                     "best_p": best_p, "best_cov": best_cov, "recovered": best_p <= ALPHA})
+                     "best_p": best_p, "best_cov": best_cov, "recovered": best_p <= ALPHA,
+                     "best_p_any": best_any, "recovered_any": best_any <= ALPHA})
         print(f"{site} {day} trial {trial}: peak {peak:4.0f} dBZ object {found_obj!s:5} p {best_p:.3f}",
               flush=True)
     return rows
@@ -139,7 +147,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(rows)
     df.to_parquet(out)
-    print(df.groupby("peak_dbz")[["object_found", "recovered"]].mean())
+    print(df.groupby("peak_dbz")[["object_found", "recovered_any", "recovered"]].mean())
 
 
 if __name__ == "__main__":
