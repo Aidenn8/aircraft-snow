@@ -52,16 +52,22 @@ connected in band x hour), compared with the largest cluster of each placebo
 
 Weakness found: near a busy airport the "side" lines are not empty - they fall on other
 flights' paths and streaks - and the average over all points is diluted by the many
-flights that do not cross cloud. This test is kept as an independent, assumption-light
-check, but is not the main detector.
+flights that do not cross cloud. Worse, it is not calibrated on winter days: on eight
+January 2025 Denver days with no visible aircraft streaks (1-8 January), its primary
+statistic reached p <= 0.05 on three (0.025, 0.012, 0.006), where about 0.4 would be
+expected. Real traffic is concentrated on a few corridors, and the change in echo along
+those corridors is not exchangeable with that along rotated copies on days when
+precipitation is not uniform. It is therefore not used in the census
+(pipeline.run_day(event_test=False)); the code remains for reference.
 
 ## Test 2: streak objects matched to single flights (streaks.py, match.py)
 
 1. Streak objects are found in each scan without reference to aircraft: Gaussian smoothing
    (0.75 km), white top-hat with a 4 km disk (removes broad precipitation), threshold
    (top-hat >= 6 dB and >= 3 dBZ), cleanup, then shape by skeleton: main path >= 8 km,
-   mean width <= 3.5 km, main path >= 4 x mean width, branchiness <= 2.5. Skeleton
-   measures accept the U-shaped streaks left by approach patterns.
+   mean width <= 3.5 km, main path >= 4 x mean width, branchiness <= 2.5, and peak
+   reflectivity <= 35 dBZ (aircraft snow is light; brighter lines are convective).
+   Skeleton measures accept the U-shaped streaks left by approach patterns.
 2. Fixed echoes are removed: objects lying mostly on pixels that are inside streak objects
    in >= 40% of the day's scans (ground clutter on terrain edges).
 3. Each object is compared with every flight that passed 10-50 min earlier. Tracks are
@@ -71,6 +77,15 @@ check, but is not the main detector.
    on it) are combined as F1. Points slower than 80 kt are not used: helicopters and slow
    aircraft loop over small areas, so their drifted "lines" are blobs that fit any echo
    (one such helicopter produced the only false-alarm day during development).
+   Only physically possible seeding points are candidates (match.py, rotation-invariant so
+   real and placebo flights are filtered alike):
+   - fall speed: ice made dh above the lowest beam's centre (geometric height from the HRRR
+     geopotential at the aircraft's pressure, minus the 4/3-earth beam height; beam
+     half-width w = range x tan 0.475 deg) must reach the beam at the point's age a with a
+     fall speed of 0.2-2.0 m/s (snow crystals to lightly rimed aggregates, Locatelli &
+     Hobbs 1974): 0.2 a <= dh + w and dh - w <= 2.0 a;
+   - temperature: HRRR temperature at the point <= -4 C (supercooled cloud needed).
+   Each match reports its implied fall speed, median dh / a over its seeding points.
 4. Newness: the object, moved back with the drift, must have been echo-free (>= 70% of
    samples < 0 dBZ) in the scans 3-30 min before the flight passed. In a stream of aircraft
    the match is therefore the first aircraft through new cloud.
@@ -85,7 +100,22 @@ check, but is not the main detector.
    falsely matched flights is the mean number each rotation produces when treated as real.
 7. Time-reversed diagnostic: the same matching with aircraft that pass 10-50 min after each
    scan (no newness test). They cannot have made the echo, so an excess over rotations would
-   reveal streak-like echoes aligned with traffic corridors for other reasons.
+   reveal streak-like echoes aligned with traffic corridors for other reasons. It is not a
+   pure null: on a day with real seeding, the aircraft following a seeder along the same
+   path match its streak in reverse.
+8. Orientation check (scripts/shift_null.py): rotations change a track's orientation, so if
+   streak-like echo shared the preferred orientation of real paths (bands and runways both
+   follow the wind) rotations would favour the real flights. Translating every flight by
+   8-16 km in 8 directions keeps orientation exactly; both placebo families are compared on
+   the same tracks (within 49 km of the radar, so shifted copies stay in the domain).
+
+Census selection (scripts/census_summary.py): every radar-day keeps its 24-rotation
+screening score. The gamma-tail p-value is calibrated empirically: each rotation, scored
+against the other rotations of its day, gives a null p-value; pooled over all tested days
+these give the calibrated p-value of each real day, (1 + count of pooled null p-values at
+or below it) / (1 + their number). Event days are selected by Benjamini-Hochberg at FDR 5%
+on the calibrated p-values; a day that screens at rank p <= 0.05 or gamma p <= 0.1 is
+re-run with 200 rotations for its per-flight catalogue and false discovery rates.
 
 Denver, 25-26 January 2025 (analysis day from 12 UTC, final method): 677 streak objects,
 63 matched to a flight; E = 78 against a null median of 29 and 95th percentile of 48; no
