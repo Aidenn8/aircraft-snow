@@ -193,7 +193,7 @@ def main():
             nd.to_csv(out / "null_days.csv", index=False)
     (out / "summary.json").write_text(json.dumps(summ, indent=1, default=float))
     keep = ["site", "day", "p_day", "q_value", "event"]
-    rd = rd.merge(tested[keep], on=["site", "day"], how="left")
+    rd = rd.drop(columns=["p_day"], errors="ignore").merge(tested[keep], on=["site", "day"], how="left")
     rd["event"] = rd.event.fillna(False).astype(bool)
     rd.to_csv(out / "radar_days.csv", index=False)
     ev = tested[tested.event]

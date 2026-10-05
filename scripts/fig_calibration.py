@@ -1,16 +1,15 @@
 """Calibration figure: how often a real streak is recovered, and how often chance passes.
 
-usage: fig_calibration.py --inj A.parquet [B.parquet ...] --census data/census
-       [--null-census data/census_null] --out FIG.png
+usage: fig_calibration.py --inj A.parquet [B.parquet ...] [--census data/census] --out FIG.png
 
 (a) Injection-recovery: share of synthetic streaks (injected along real flights' drifted
     tracks into real radar on quiet days) found as a streak object, matched to some flight
     at p <= 0.05 (event recall), and matched to the injected flight (attribution), by peak
     reflectivity, with 95% Clopper-Pearson intervals.
-(b) Day-test calibration: for nominal levels, the share of p-values at or below the level,
-    for the pooled leave-one-out rotation nulls of the census (does the gamma tail mean what
-    it says?) and for real flights on summer null days (are real and rotated flights
-    exchangeable when no seeding is possible?). Calibrated tests lie on the diagonal.
+(b) The day test: for nominal levels, the share of days whose p-value is at or below the
+    level, for warm-season null days, when no aircraft can seed (census_summary.py's
+    null_days.csv), and for the winter census days (radar_days.csv). A calibrated test puts
+    the null days on the diagonal; real events lift the winter days above it at small levels.
 """
 import argparse
 import pathlib
@@ -42,7 +41,6 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--inj", nargs="+", required=True)
     ap.add_argument("--census", default="")
-    ap.add_argument("--null-census", default="")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     figstyle.apply()
@@ -72,33 +70,33 @@ def main():
     ax1.set_xlabel("peak reflectivity of the injected streak (dBZ)")
     ax1.set_ylabel("share of injected streaks")
     ax1.set_title(f"(a) Recovery of {len(df)} synthetic streaks")
-    ax1.legend(loc="center right")
+    ax1.legend(loc="upper left")
 
-    levels = np.array([0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001])
+    levels = np.array([0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002])
     ax2.plot(levels, levels, color=figstyle.AXIS, lw=1, ls="--")
-    ax2.text(0.0012, 0.0012 * 1.6, "calibrated", rotation=45, fontsize=7.5, color=figstyle.MUTED,
+    ax2.text(0.003, 0.003 * 1.5, "calibrated", rotation=45, fontsize=7.5, color=figstyle.MUTED,
              rotation_mode="anchor")
     drawn = False
-    if a.census and (pathlib.Path(a.census) / "null_pvalues.npy").exists():
-        null = np.load(pathlib.Path(a.census) / "null_pvalues.npy")
-        s, n = share_below(null, levels)
-        ok = s > 0
-        ax2.plot(levels[ok], s[ok], "o-", color=figstyle.BLUE, ms=5, label=f"rotations scored as real (n={n:,})")
-        drawn = True
-    if a.null_census and (pathlib.Path(a.null_census) / "radar_days.csv").exists():
-        rd = pd.read_csv(pathlib.Path(a.null_census) / "radar_days.csv")
-        s, n = share_below(rd.p_gamma, levels)
-        lo_hi = np.array([clopper_pearson(int(round(v * n)), n) for v in s])
-        ok = s > 0
-        ax2.errorbar(levels[ok], s[ok], yerr=[s[ok] - lo_hi[ok, 0], lo_hi[ok, 1] - s[ok]], fmt="s",
-                     color=figstyle.ORANGE, ms=5, capsize=0, elinewidth=1.2,
-                     label=f"real flights, summer null days (n={n})")
+    cen = pathlib.Path(a.census) if a.census else None
+    for name, label, colour, mk in (("null_days.csv", "warm null days", figstyle.ORANGE, "s"),
+                                    ("radar_days.csv", "winter census days", figstyle.BLUE, "o")):
+        if cen is None or not (cen / name).exists():
+            continue
+        d = pd.read_csv(cen / name)
+        d = d[d.screened_out.fillna("") == ""] if "screened_out" in d else d
+        pv = d.p_day.fillna(1.0).to_numpy(float)
+        s_, n = share_below(pv, levels)
+        ci = np.array([clopper_pearson(int(round(v * n)), n) for v in s_])
+        ok = s_ > 0                          # a level with no day below it has no point on a log axis
+        ax2.errorbar(levels[ok], s_[ok], yerr=[s_[ok] - ci[ok, 0], ci[ok, 1] - s_[ok]], fmt=mk + "-",
+                     color=colour, ms=5, lw=1.4, capsize=0, elinewidth=1.0,
+                     label=f"{label} (n={n}; none below {levels[~ok].max():g})" if (~ok).any() else f"{label} (n={n})")
         drawn = True
     ax2.set_xscale("log")
     ax2.set_yscale("log")
     ax2.set_xlabel("nominal p-value level")
-    ax2.set_ylabel("share at or below the level")
-    ax2.set_title("(b) Day test under no seeding")
+    ax2.set_ylabel("share of days at or below the level")
+    ax2.set_title("(b) Day p-values: no seeding against the census")
     if drawn:
         ax2.legend(loc="upper left")
     fig.savefig(a.out)
