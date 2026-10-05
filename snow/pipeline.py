@@ -92,6 +92,8 @@ PERSISTENT_FRACTION = 0.4      # pixels inside streak objects in >= this share o
 MIN_MATCH_GS_KT = 80.0
 PERSISTENT_OVERLAP = 0.5       # objects mostly on such pixels are fixed echo, not snow
 SCREEN_ANGLES = tuple(np.linspace(20.0, 340.0, 24))
+SCREEN_P = 0.05                # confirm a day whose screening rank p-value is <= this
+SCREEN_P_GAMMA = 0.1           # ... or whose gamma-tail p-value is <= this
 CONFIRM_ANGLES = tuple(np.linspace(20.0, 340.0, 200))
 
 
@@ -132,6 +134,12 @@ def matching_points(prep: dict):
     return pts[fast].reset_index(drop=True), dr[fast]
 
 
+def screen_passes(day_stat: dict) -> bool:
+    """Whether a screened day goes on to confirmation with CONFIRM_ANGLES rotations."""
+    pg = day_stat.get("p_day_gamma", np.nan)
+    return bool(day_stat.get("p_day", 1.0) <= SCREEN_P or (np.isfinite(pg) and pg <= SCREEN_P_GAMMA))
+
+
 def match_day(prep: dict, angles=SCREEN_ANGLES, reverse: bool = False) -> pd.DataFrame:
     """Streak objects in every scan of the day (fixed echoes removed), each matched to its
     best new flight with rotation placebos (reverse=True: the time-reversed diagnostic)."""
@@ -160,10 +168,11 @@ def drop_radar_cache(site: str, day: dt.date):
 
 
 def run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
-            null_alt_max_ft: float | None = None, keep_radar: bool | None = None) -> dict:
-    """Run both tests for one radar-day (see below). Unless keep_radar is True, the day's
-    cached radar files are deleted afterwards when neither test reaches p <= 0.05."""
-    summary = _run_day(site, day, save, force, null_alt_max_ft)
+            null_alt_max_ft: float | None = None, keep_radar: bool | None = None,
+            event_test: bool = True) -> dict:
+    """Run the tests for one radar-day (see below). Unless keep_radar is True, the day's
+    cached radar files are deleted afterwards when no test reaches p <= 0.05."""
+    summary = _run_day(site, day, save, force, null_alt_max_ft, event_test)
     interesting = (summary.get("streaks", {}).get("p_day", 1.0) <= 0.05
                    or summary.get("stats", {}).get(event.PRIMARY, {}).get("p_cluster", 1.0) <= 0.05)
     if keep_radar is False or (keep_radar is None and not interesting):
@@ -172,10 +181,12 @@ def run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
 
 
 def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
-             null_alt_max_ft: float | None = None) -> dict:
-    """Run both tests for one radar-day. With null_alt_max_ft set (null mode, for
+             null_alt_max_ft: float | None = None, event_test: bool = True) -> dict:
+    """Run the tests for one radar-day. With null_alt_max_ft set (null mode, for
     false-alarm calibration on warm days), only tracks below that altitude are used, the
-    screens are skipped and results go to data/events_null/."""
+    screens are skipped and results go to data/events_null/. event_test=False skips the
+    parcel-following event test (event.py), which is not calibrated on winter days (see
+    docs/methods.md); the census runs without it."""
     null = null_alt_max_ft is not None
     out_dir = (OUT.parent / "events_null" if null else OUT) / site
     summ_path = out_dir / f"{day:%Y-%m-%d}.json"
@@ -201,23 +212,25 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
             out_dir.mkdir(parents=True, exist_ok=True)
             summ_path.write_text(json.dumps(summary, indent=1, default=float))
         return summary
-    res = event.run(prep["grids"], prep["points"], prep["drift"], prep["t0"].timestamp(), 24)
     summary = {"site": site, "day": f"{day}", "n_scans": int(len(prep["grids"].t)),
                "n_points": int(len(prep["points"])),
                "n_flights": int(prep["points"].flight.nunique()), "stats": {},
                "cold_moist": cm, "echo": ep}
-    zmaps = {}
-    for stat in event.STATS + ("new",):
-        ev = event.evaluate_clusters(res, stat)
-        zmaps[stat] = ev.pop("z_map")
-        ev.pop("placebo_masses")
-        summary["stats"][stat] = ev
+    res, zmaps = None, {}
+    if event_test:
+        res = event.run(prep["grids"], prep["points"], prep["drift"], prep["t0"].timestamp(), 24)
+        for stat in event.STATS + ("new",):
+            ev = event.evaluate_clusters(res, stat)
+            zmaps[stat] = ev.pop("z_map")
+            ev.pop("placebo_masses")
+            summary["stats"][stat] = ev
     # streak objects matched to single flights (match.py): screen with few rotations,
-    # confirm promising days with many
+    # confirm promising days with many. With 24 rotations the rank p-value cannot go below
+    # 0.04, so the smooth gamma-tail estimate also lets a borderline day through.
     streak_table = match_day(prep, SCREEN_ANGLES)
     summary["streaks"] = match.day_statistic(streak_table)
     summary["streaks"]["n_rotations"] = len(SCREEN_ANGLES)
-    if summary["streaks"]["p_day"] <= 0.05 or summary["stats"][event.PRIMARY]["p_cluster"] <= 0.05:
+    if screen_passes(summary["streaks"]):
         streak_table = match_day(prep, CONFIRM_ANGLES)
         summary["streaks"] = match.day_statistic(streak_table)
         summary["streaks"]["n_rotations"] = len(CONFIRM_ANGLES)
@@ -233,12 +246,14 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
         st["placebo_cov"] = st.placebo_cov.map(lambda a: np.asarray(a, np.float32).tolist())
         st.to_parquet(out_dir / f"{day:%Y-%m-%d}_streaks.parquet")
     summary["seconds"] = round(time.time() - tic, 1)
-    if save:
+    if save and res is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(out_dir / f"{day:%Y-%m-%d}_acc.npz", acc_real=res["acc_real"],
                             acc_placebo=res["acc_placebo"], new_real=res["new_real"],
                             new_placebo=res["new_placebo"], band_edges=res["band_edges"],
                             angles=res["angles"], t_start=res["t_start"],
                             **{f"zmap_{k}": v for k, v in zmaps.items()})
+    if save:
+        out_dir.mkdir(parents=True, exist_ok=True)
         summ_path.write_text(json.dumps(summary, indent=1, default=float))
     return summary

@@ -4,7 +4,7 @@ usage: census.py START END [--workers N] [--sites config/census_sites.csv] [--fo
 
 For each analysis day D (12 UTC D to 12 UTC D+1) whose ADS-B days D and D+1 are present,
 the continental files are split per radar (snow.adsb_split) and every radar-day is run
-(snow.pipeline.run_day) in a pool of worker processes. Results land in data/events/SITE/.
+(snow.pipeline.run_day, streak test only) in a pool of worker processes. Results land in data/events/SITE/.
 Days already done are skipped unless --force. A one-line summary per radar-day goes to
 stdout; tracebacks to stderr.
 """
@@ -20,18 +20,18 @@ from snow import adsb, adsb_split
 def one(site: str, day: dt.date, force: bool) -> str:
     from snow import pipeline
     try:
-        s = pipeline.run_day(site, day, force=force)
+        s = pipeline.run_day(site, day, force=force, event_test=False)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         return f"{site} {day}: FAILED {e!r}"
     if "screened_out" in s:
         return f"{site} {day}: screened out ({s['screened_out']})"
     sk = s.get("streaks", {})
-    zp = s["stats"]["z"]["p_cluster"]
     return (f"{site} {day}: flights {s['n_flights']:5d} streaks {sk.get('n_streaks', 0):4d} "
-            f"matched {sk.get('n_matched', 0):3d} p_day={sk.get('p_day', 1):.3f} "
+            f"matched {sk.get('n_matched', 0):3d} E={sk.get('E', 0):6.1f} p_day={sk.get('p_day', 1):.3f} "
+            f"p_gamma={sk.get('p_day_gamma', float('nan')):.2g} "
             f"p_rev={s.get('streaks_reverse', {}).get('p_day', float('nan')):.3f} "
-            f"(R={sk.get('n_rotations', 0)}) p_event={zp:.3f} ({s['seconds']:.0f}s)")
+            f"(R={sk.get('n_rotations', 0)}) ({s['seconds']:.0f}s)")
 
 
 def main():

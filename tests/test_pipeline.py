@@ -40,3 +40,11 @@ def test_drop_radar_cache_only_removes_the_day_window(tmp_path, monkeypatch):
     left = sorted(p.name for p in l3.iterdir())
     assert removed == 3
     assert left == sorted([names[0], names[4], names[5]])
+
+
+def test_screen_passes():
+    assert pipeline.screen_passes({"p_day": 0.04, "p_day_gamma": 0.5})
+    assert pipeline.screen_passes({"p_day": 0.2, "p_day_gamma": 0.08})
+    assert not pipeline.screen_passes({"p_day": 0.08, "p_day_gamma": 0.3})
+    assert not pipeline.screen_passes({"p_day": 0.08, "p_day_gamma": float("nan")})
+    assert not pipeline.screen_passes({})

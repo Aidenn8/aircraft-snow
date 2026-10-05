@@ -1,6 +1,6 @@
 """Run the event test for one radar over a range of analysis days.
 
-usage: run_days.py SITE START END [--force]
+usage: run_days.py SITE START END [--force] [--null-alt FT] [--step N] [--no-event]
 An analysis day D covers 12 UTC on D to 12 UTC on D+1, so ADS-B for D and D+1 is needed;
 days without it are skipped and listed.
 """
@@ -22,6 +22,7 @@ def main():
     ap.add_argument("--null-alt", type=float, default=None,
                     help="null mode: only tracks below this altitude (ft), no screens")
     ap.add_argument("--step", type=int, default=1, help="run every STEP-th day")
+    ap.add_argument("--no-event", action="store_true", help="skip the parcel-following event test")
     a = ap.parse_args()
     d = dt.date.fromisoformat(a.start)
     end = dt.date.fromisoformat(a.end)
@@ -35,7 +36,8 @@ def main():
             d += dt.timedelta(days=1)
             continue
         try:
-            s = pipeline.run_day(a.site, d, force=a.force, null_alt_max_ft=a.null_alt)
+            s = pipeline.run_day(a.site, d, force=a.force, null_alt_max_ft=a.null_alt,
+                                 event_test=not a.no_event)
             if "screened_out" in s:
                 print(f"{a.site} {d}: screened out ({s['screened_out']})", flush=True)
                 d += dt.timedelta(days=1)
@@ -45,6 +47,7 @@ def main():
             print(f"{a.site} {d}: flights {s['n_flights']:5d} scans {s['n_scans']:3d}  "
                   f"streaks {sk.get('n_streaks', 0):4d} matched {sk.get('n_matched', 0):3d} "
                   f"E={sk.get('E', 0):6.1f} p_day={sk.get('p_day', 1):.3f} "
+                  f"p_gamma={sk.get('p_day_gamma', float('nan')):.2g} (R={sk.get('n_rotations', 0)}) "
                   f"p_rev={s.get('streaks_reverse', {}).get('p_day', float('nan')):.3f}  "
                   + "  ".join(f"{k}: p={v['p_cluster']:.3f}" for k, v in st.items())
                   + f"  ({s.get('seconds', 0):.0f}s)", flush=True)
