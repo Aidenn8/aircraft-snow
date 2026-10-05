@@ -167,7 +167,19 @@ rotation of 200 reached it (rank p < 0.005, gamma tail p = 2e-4). At p <= 0.005,
   0.12-0.6 m/s). Rotation breaks every link between where aircraft fly and where echo
   forms, and not all such links are seeding: aircraft are routed around storms, and
   terrain-forced convergence lines (the Denver Convergence-Vorticity Zone, for one) form near
-  the airport. A null that keeps those links is needed; the day-swap test (below) is one.
+  the airport. One warm day at p = 0.01 could be chance; the warm-season null at all census
+  radars (below) measures how often it happens.
+- A corridor-preserving null does not work, because airline schedules repeat. The day-swap
+  test (scripts/dayswap_null.py) replaces the real flights with those of each of the 28
+  other days within two weeks, at the same times of day, through this day's radar and wind.
+  On 1 July it removes the false alarm (rank p = 0.33). But it also removes Denver (E = 31.8
+  against a median of 22.3 and 95th percentile of 31.9 for the other days; rank p = 0.10):
+  on 7 of the 12 confirmed streaks, flights of 6-14 of the 28 other days fit at least as
+  well as the real seeder (F1 up to 0.94), because the same flight numbers fly the same
+  procedures at the same minutes every day. A null that keeps the corridors and the timing
+  keeps the clones of the seeders too, so it can say that a streak lies on a corridor but
+  not that one aircraft made it. The census therefore uses rotations, with the physical
+  requirements, and measures their false-alarm rate on warm days instead.
 
 ## Lessons from development
 
