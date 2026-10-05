@@ -106,6 +106,27 @@ def test_new_echo_statistic():
     assert event.new_echo_did(acc2, min_count=10)[0, 0] == 0.0
 
 
+def test_vectorised_rotations_match_loop():
+    g, pts, dr = _synthetic()
+    rng = np.random.default_rng(3)
+    pts = pts.assign(x=pts.x + rng.normal(0, 3000, len(pts)), y=pts.y + rng.normal(0, 3000, len(pts)))
+    perp = event.perpendicular(pts)
+    x, y, t = pts.x.to_numpy(), pts.y.to_numpy(), pts.t.to_numpy(float)
+    band = np.zeros(len(pts), int)
+    hour = pts.flight.to_numpy()
+    angles = [0.0, 37.0, 200.0]
+    acc, new = event.tables_rotated(g, x, y, t, dr, perp, band, hour, 1, 2, angles)
+    for r, a in enumerate(angles):
+        th = np.radians(a)
+        c, s = np.cos(th), np.sin(th)
+        xr, yr = x * c - y * s, x * s + y * c
+        pr = np.c_[perp[:, 0] * c - perp[:, 1] * s, perp[:, 0] * s + perp[:, 1] * c]
+        ref = event.did_table(g, xr, yr, t, dr, pr, band, hour, 1, 2)
+        ref_new = event.new_echo_table(g, xr, yr, t, dr, pr, band, hour, 1, 2)
+        assert np.allclose(acc[r], ref)
+        assert np.allclose(new[r], ref_new)
+
+
 def test_cells_sum_matches_direct_accumulation():
     rng = np.random.default_rng(1)
     acc = rng.random((6, 5, 2, 2, len(event.STATS) + 1))

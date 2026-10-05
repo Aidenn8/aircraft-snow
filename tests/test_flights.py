@@ -41,6 +41,26 @@ def test_interp_profile_time_and_log_pressure():
     assert out.t.iloc[0] == t_pt  # point times untouched
 
 
+def test_densify_spacing_and_endpoints():
+    pts = pd.DataFrame({"flight": [0, 0, 0, 1], "x": [0.0, 1000.0, 3000.0, 0.0],
+                        "y": [0.0, 0.0, 0.0, 5.0], "t": [0.0, 10.0, 20.0, 0.0],
+                        "alt_ft": [1000.0, 1100.0, 1300.0, 5000.0], "p_hpa": [900.0] * 4})
+    d = flights.densify(pts, step_m=250.0)
+    f0 = d[d.flight == 0]
+    assert np.all(np.diff(f0.x) <= 250.0 + 1e-9)
+    assert f0.x.iloc[0] == 0.0 and f0.x.iloc[-1] == 3000.0
+    assert np.isclose(f0[f0.x == 500.0].t.iloc[0], 5.0)          # linear in time too
+    assert np.isclose(f0[f0.x == 2000.0].alt_ft.iloc[0], 1200.0)
+    assert len(d[d.flight == 1]) == 1                            # single point kept as is
+
+
+def test_densify_does_not_bridge_gaps():
+    pts = pd.DataFrame({"flight": [0, 0], "x": [0.0, 10000.0], "y": [0.0, 0.0],
+                        "t": [0.0, 300.0], "alt_ft": [1000.0, 1000.0], "p_hpa": [900.0, 900.0]})
+    d = flights.densify(pts, step_m=250.0, max_gap_s=60.0)
+    assert len(d) == 2
+
+
 def test_interp_refuses_field_named_t():
     import pytest
     with pytest.raises(ValueError):

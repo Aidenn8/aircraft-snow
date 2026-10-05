@@ -52,6 +52,31 @@ def segment(pos: pd.DataFrame, gap_s: float = GAP_S) -> pd.DataFrame:
     return pos
 
 
+def densify(points: pd.DataFrame, step_m: float = 250.0, max_gap_s: float = 60.0,
+            columns=("x", "y", "t", "alt_ft", "p_hpa")) -> pd.DataFrame:
+    """Linearly interpolate each flight's track so consecutive points are at most step_m
+    apart (heatmap positions are 10-30 s apart, i.e. up to several km at airliner speeds).
+    Pairs more than max_gap_s apart are not bridged. Keeps the flight column and adds
+    `src`, the index of the original point each new point starts from."""
+    p = points.sort_values(["flight", "t"])
+    fl = p.flight.to_numpy()
+    cols = {c: p[c].to_numpy(float) for c in columns}
+    src = p.index.to_numpy()
+    same = (fl[1:] == fl[:-1]) & (np.diff(cols["t"]) <= max_gap_s)
+    dist = np.hypot(np.diff(cols["x"]), np.diff(cols["y"]))
+    nseg = np.where(same, np.maximum(np.ceil(dist / step_m), 1), 1).astype(int)
+    # each original point i (except a flight's last) spawns nseg[i] points at fractions k/nseg
+    reps = np.r_[nseg, 1]
+    i0 = np.repeat(np.arange(len(p)), reps)
+    k = np.concatenate([np.arange(n) for n in reps])
+    frac = np.where(np.r_[same, False][i0], k / np.repeat(reps, reps), 0.0)
+    i1 = np.minimum(i0 + 1, len(p) - 1)
+    out = {c: v[i0] + frac * (v[i1] - v[i0]) for c, v in cols.items()}
+    out["flight"] = fl[i0]
+    out["src"] = src[i0]
+    return pd.DataFrame(out)
+
+
 def flight_table(pos: pd.DataFrame, calls: pd.DataFrame | None = None) -> pd.DataFrame:
     """One row per flight: identity, time span, altitude trend and engine class."""
     g = pos.groupby("flight")

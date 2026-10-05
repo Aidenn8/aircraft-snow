@@ -43,6 +43,7 @@ THRESH = {"e0": 0.0, "e5": 5.0, "e10": 10.0}
 PRIMARY = "z"
 CELL_SIZES = ((2, 1), (2, 3), (4, 3))          # (bands of 1000 ft, hours)
 MIN_COUNT = 50
+ROTATION_CHUNK = 32
 PLACEBO_ANGLES = tuple(np.arange(20.0, 340.1, 2.0))   # 161 rotations, none within 20 deg
 AIRCRAFT_MASK_M = 1500.0
 AIRCRAFT_MATCH_S = 15.0   # positions this close in time to the beam's passage are masked
@@ -274,6 +275,82 @@ def new_echo_did(acc_cells, min_count=MIN_COUNT):
     return S
 
 
+def tables_rotated(grids: Grids, x, y, t, drift, perp, band, hour, n_band, n_hour, angles,
+                   offset_m=CONTROL_OFFSET_M, min_before=2, min_after=3):
+    """did_table and new_echo_table for many rotations of the same points at once.
+
+    angles: rotation angles in degrees (0 = the real tracks). Returns (acc, new) with shapes
+    (n_rot, n_band, n_hour, 2, 2, len(STATS) + 1) and (n_rot, n_band, n_hour, 3, 2), equal
+    to calling did_table / new_echo_table on each rotated point set."""
+    ns = len(STATS)
+    R = len(angles)
+    ncell = n_band * n_hour
+    a = np.radians(np.asarray(angles, float))
+    cs, sn = np.cos(a)[:, None], np.sin(a)[:, None]
+    acc = np.zeros((R * ncell * 4, ns + 1))
+    n = len(x)
+    mb = np.full((R, n, 3), -np.inf, np.float32)
+    ma = np.full((R, n, 3), -np.inf, np.float32)
+    nb = np.zeros((R, n, 3), np.int16)
+    na = np.zeros((R, n, 3), np.int16)
+    order = np.argsort(t)
+    ts = t[order]
+    cell_pt = band * n_hour + hour
+    rr = np.arange(R)[:, None]
+    for k, T in enumerate(grids.t):
+        lo = np.searchsorted(ts, T - AFTER[1])
+        hi = np.searchsorted(ts, T - BEFORE[0], side="right")
+        if hi <= lo:
+            continue
+        idx = order[lo:hi]
+        age = T - t[idx]
+        bef = (age >= BEFORE[0]) & (age <= BEFORE[1])
+        aft = (age >= AFTER[0]) & (age <= AFTER[1])
+        m = bef | aft
+        if not m.any():
+            continue
+        idx, age, bef, aft = idx[m], age[m], bef[m], aft[m]
+        win = aft.astype(np.int64)                                   # 0 before, 1 after
+        X = x[idx] * cs - y[idx] * sn                                # (R, n_k)
+        Y = x[idx] * sn + y[idx] * cs
+        PX = perp[idx, 0] * cs - perp[idx, 1] * sn
+        PY = perp[idx, 0] * sn + perp[idx, 1] * cs
+        px = X + drift[idx, 0] * age
+        py = Y + drift[idx, 1] * age
+        base = (rr * ncell + cell_pt[idx]) * 2 + win                 # (R, n_k)
+        for line, sgn in enumerate((0.0, 1.0, -1.0)):
+            z = grids.lookup(k, px + sgn * offset_m * PX, py + sgn * offset_m * PY)
+            ok = np.isfinite(z)
+            # difference-in-differences sums (lines 1 and 2 both go to the "off" slot)
+            flat = (base * 2 + (0 if line == 0 else 1))[ok]
+            zz = z[ok].astype(np.float64)
+            acc[:, 0] += np.bincount(flat, weights=zz, minlength=len(acc))
+            for s_i, s_name in enumerate(STATS[1:], start=1):
+                acc[:, s_i] += np.bincount(flat, weights=(zz >= THRESH[s_name]), minlength=len(acc))
+            acc[:, ns] += np.bincount(flat, minlength=len(acc))
+            # per-parcel maxima for the new-echo statistic
+            zf = np.where(ok, z, -np.inf).astype(np.float32)
+            ib = np.nonzero(bef)[0]
+            ia = np.nonzero(aft)[0]
+            if len(ib):
+                g = idx[ib]
+                mb[:, g, line] = np.maximum(mb[:, g, line], zf[:, ib])
+                nb[:, g, line] += ok[:, ib]
+            if len(ia):
+                g = idx[ia]
+                ma[:, g, line] = np.maximum(ma[:, g, line], zf[:, ia])
+                na[:, g, line] += ok[:, ia]
+    acc = acc.reshape(R, n_band, n_hour, 2, 2, ns + 1)
+    new = np.zeros((R, ncell, 3, 2))
+    for line in range(3):
+        ev = (nb[:, :, line] >= min_before) & (na[:, :, line] >= min_after)
+        hit = ev & (ma[:, :, line] >= NEW_ECHO_DBZ) & (mb[:, :, line] < QUIET_DBZ)
+        for r in range(R):
+            new[r, :, line, 0] = np.bincount(cell_pt[hit[r]], minlength=ncell)
+            new[r, :, line, 1] = np.bincount(cell_pt[ev[r]], minlength=ncell)
+    return acc, new.reshape(R, n_band, n_hour, 3, 2)
+
+
 def cells(acc, bw: int, hw: int):
     """Sum fine accumulators over windows of bw bands and hw hours (sliding, step 1)."""
     c = np.cumsum(np.cumsum(acc, axis=0), axis=1)
@@ -312,18 +389,17 @@ def run(grids: Grids, points: pd.DataFrame, drift: np.ndarray, t_start: float, n
     band, hour, dr = band[keep], hour[keep], drift[keep]
     perp = perpendicular(pts)
     nb = len(edges) - 1
-    real = did_table(grids, x, y, t, dr, perp, band, hour, nb, n_hour)
-    real_new = new_echo_table(grids, x, y, t, dr, perp, band, hour, nb, n_hour)
-    plac, plac_new = [], []
-    for a in angles:
-        r = np.radians(a)
-        c, s = np.cos(r), np.sin(r)
-        xr, yr = x * c - y * s, x * s + y * c
-        pr = np.c_[perp[:, 0] * c - perp[:, 1] * s, perp[:, 0] * s + perp[:, 1] * c]
-        plac.append(did_table(grids, xr, yr, t, dr, pr, band, hour, nb, n_hour))
-        plac_new.append(new_echo_table(grids, xr, yr, t, dr, pr, band, hour, nb, n_hour))
-    return {"acc_real": real, "acc_placebo": np.stack(plac), "new_real": real_new,
-            "new_placebo": np.stack(plac_new), "band_edges": edges,
+    all_angles = np.r_[0.0, np.asarray(angles, float)]
+    accs, news = [], []
+    for c0 in range(0, len(all_angles), ROTATION_CHUNK):
+        a_c, n_c = tables_rotated(grids, x, y, t, dr, perp, band, hour, nb, n_hour,
+                                  all_angles[c0:c0 + ROTATION_CHUNK])
+        accs.append(a_c)
+        news.append(n_c)
+    acc = np.concatenate(accs)
+    new = np.concatenate(news)
+    return {"acc_real": acc[0], "acc_placebo": acc[1:], "new_real": new[0],
+            "new_placebo": new[1:], "band_edges": edges,
             "t_start": t_start, "hour_s": hour_s, "angles": np.asarray(angles)}
 
 

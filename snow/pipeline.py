@@ -14,7 +14,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from . import adsb, epoch, event, flights, hrrr, radar
+from . import adsb, epoch, event, flights, hrrr, match, radar, screen, sites, streaks
 from .radar import beam_height_ground_range
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -26,6 +26,11 @@ MAX_RANGE_M = 65_000.0
 ALT_RANGE_FT = (2_000.0, 24_000.0)
 BEAM_MARGIN_M = 500.0
 HRRR_BOX = 2
+
+
+def site_location(site: str) -> tuple[float, float]:
+    """Radar latitude/longitude from the NCEI station list."""
+    return sites.location(site)
 
 
 def day_window(day: dt.date):
@@ -74,8 +79,56 @@ def prepare(site: str, day: dt.date, scans=None):
     allpos = flights.load_window(lat0, lon0, MAX_RANGE_M / 1000 + 15, t0 - dt.timedelta(hours=1),
                                  t1 + dt.timedelta(hours=1.5), max_alt_ft=60_000)
     grids = event.Grids.from_sweeps(scans, aircraft=allpos[["hex", "t", "x", "y", "gs"]])
+    # tracks interpolated to 250 m spacing for streak matching; each interpolated point
+    # inherits the drift of the reported position it starts from
+    dense = flights.densify(pts)
+    drift_dense = drift[dense.src.to_numpy()]
     return {"grids": grids, "points": pts, "drift": drift, "profiles": profs, "sweep0": sw0,
-            "positions": pos, "t0": t0}
+            "positions": pos, "t0": t0, "points_dense": dense, "drift_dense": drift_dense}
+
+
+PERSISTENT_FRACTION = 0.4      # pixels inside streak objects in >= this share of scans
+PERSISTENT_OVERLAP = 0.5       # objects mostly on such pixels are fixed echo, not snow
+SCREEN_ANGLES = tuple(np.linspace(20.0, 340.0, 24))
+CONFIRM_ANGLES = tuple(np.linspace(20.0, 340.0, 200))
+
+
+def streak_objects_day(prep: dict):
+    """Streak objects of every scan in the day, after removing fixed echoes: returns
+    a list of (scan index, objects, label image) and the persistence map."""
+    G = prep["grids"]
+    xs = G.x0 + G.res * np.arange(G.z.shape[2])
+    ys = G.y0 + G.res * np.arange(G.z.shape[1])
+    t0 = prep["t0"].timestamp()
+    found, count, n = [], np.zeros(G.z.shape[1:], np.int32), 0
+    for k, T in enumerate(G.t):
+        if not (t0 <= T <= t0 + 86400 + 3600):
+            continue
+        z = np.where(np.isnan(G.z[k]), streaks.FLOOR_DBZ, G.z[k])
+        obj, lab = streaks.find_streaks(streaks.GridScan(T, xs, ys, z, np.isfinite(G.z[k])))
+        n += 1
+        count += lab > 0
+        if not obj.empty:
+            found.append((k, obj, lab))
+    persist = count >= max(PERSISTENT_FRACTION * n, 3)
+    kept = []
+    for k, obj, lab in found:
+        frac = obj.label.map(lambda L: float(persist[lab == L].mean()))
+        o = obj[frac.to_numpy() < PERSISTENT_OVERLAP]
+        if not o.empty:
+            kept.append((k, o, lab))
+    return kept, persist, xs, ys
+
+
+def match_day(prep: dict, angles=SCREEN_ANGLES) -> pd.DataFrame:
+    """Streak objects in every scan of the day (fixed echoes removed), each matched to its
+    best new flight with rotation placebos."""
+    G, pts, dr = prep["grids"], prep["points_dense"], prep["drift_dense"]
+    kept, _, xs, ys = streak_objects_day(prep)
+    rows = [match.match_streaks(G, G.t[k], lab, obj, xs, ys, pts, dr, angles=angles)
+            for k, obj, lab in kept]
+    rows = [r for r in rows if not r.empty]
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
 def run_day(site: str, day: dt.date, save: bool = True, force: bool = False) -> dict:
@@ -84,17 +137,50 @@ def run_day(site: str, day: dt.date, save: bool = True, force: bool = False) -> 
     if summ_path.exists() and not force:
         return json.loads(summ_path.read_text())
     tic = time.time()
+    t0, _ = day_window(day)
+    lat0, lon0 = site_location(site)
+    cm = screen.cold_moist(lat0, lon0, t0)
+    if not cm["pass"]:
+        summary = {"site": site, "day": f"{day}", "screened_out": "no cold moist layer",
+                   "cold_moist": cm, "seconds": round(time.time() - tic, 1)}
+        if save:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            summ_path.write_text(json.dumps(summary, indent=1, default=float))
+        return summary
     prep = prepare(site, day)
+    ep = screen.echo_present(prep["grids"])
+    if not ep["pass"]:
+        summary = {"site": site, "day": f"{day}", "screened_out": "no echo",
+                   "cold_moist": cm, "echo": ep, "seconds": round(time.time() - tic, 1)}
+        if save:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            summ_path.write_text(json.dumps(summary, indent=1, default=float))
+        return summary
     res = event.run(prep["grids"], prep["points"], prep["drift"], prep["t0"].timestamp(), 24)
     summary = {"site": site, "day": f"{day}", "n_scans": int(len(prep["grids"].t)),
                "n_points": int(len(prep["points"])),
-               "n_flights": int(prep["points"].flight.nunique()), "stats": {}}
+               "n_flights": int(prep["points"].flight.nunique()), "stats": {},
+               "cold_moist": cm, "echo": ep}
     zmaps = {}
     for stat in event.STATS + ("new",):
         ev = event.evaluate_clusters(res, stat)
         zmaps[stat] = ev.pop("z_map")
         ev.pop("placebo_masses")
         summary["stats"][stat] = ev
+    # streak objects matched to single flights (match.py): screen with few rotations,
+    # confirm promising days with many
+    streak_table = match_day(prep, SCREEN_ANGLES)
+    summary["streaks"] = match.day_statistic(streak_table)
+    summary["streaks"]["n_rotations"] = len(SCREEN_ANGLES)
+    if summary["streaks"]["p_day"] <= 0.05 or summary["stats"][event.PRIMARY]["p_cluster"] <= 0.05:
+        streak_table = match_day(prep, CONFIRM_ANGLES)
+        summary["streaks"] = match.day_statistic(streak_table)
+        summary["streaks"]["n_rotations"] = len(CONFIRM_ANGLES)
+    if save and not streak_table.empty:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        st = streak_table.copy()
+        st["placebo_cov"] = st.placebo_cov.map(lambda a: np.asarray(a, np.float32).tolist())
+        st.to_parquet(out_dir / f"{day:%Y-%m-%d}_streaks.parquet")
     summary["seconds"] = round(time.time() - tic, 1)
     if save:
         out_dir.mkdir(parents=True, exist_ok=True)
