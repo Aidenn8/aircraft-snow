@@ -76,6 +76,36 @@ header.hero { display: grid; gap: 18px; padding-block: 8px 32px; }
 .seeders .ty { font: 500 0.95rem var(--font-mono); color: var(--muted); }
 .seeders .meta { grid-column: 1 / -1; font-size: 0.8rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .note { font-size: 0.85rem; color: var(--muted); }
+.two-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { .two-col { grid-template-columns: minmax(0, 1fr); } }
+.prose { display: grid; gap: 14px; }
+.prose p { color: var(--ink-2); }
+.prose strong { color: var(--ink); font-weight: 600; }
+.stat-row { display: flex; flex-wrap: wrap; gap: 28px; }
+.stat { display: grid; gap: 2px; }
+.stat b { font: 600 var(--step-3)/1 var(--font-display); color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat > span { font-size: 0.85rem; color: var(--muted); max-width: 22ch; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { padding: 8px 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th { font: 500 0.75rem/1.2 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+tbody tr:last-child td { border-bottom: 0; }
+td .num { font-variant-numeric: tabular-nums; }
+td:nth-child(n+4), th:nth-child(n+4) { text-align: right; }
+.chart { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .tick { font: 400 11px var(--font-ui); fill: var(--ink-2); }
+.chart .axis-label { font: 400 12px var(--font-ui); fill: var(--ink-2); }
+.chart .note-text { font: 400 11px var(--font-ui); fill: var(--muted); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--ink-2); margin-top: 8px; }
+.chart-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.chart-legend .sw.fill { background: var(--seed); }
+.chart-legend .sw.ring { border: 1.5px solid var(--muted); }
+.chart-legend .sw.band { border-radius: 2px; width: 18px; height: 8px; background: var(--seed); opacity: 0.3; }
+.tip { position: fixed; z-index: 10; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--rule);
+       border-radius: 4px; padding: 7px 10px; font-size: 0.82rem; line-height: 1.45; box-shadow: 0 2px 10px rgba(0,0,0,0.12); max-width: 260px; }
+.tip .muted { color: var(--muted); }
+footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-size: 0.85rem; color: var(--muted); display: grid; gap: 6px; }
 </style>
 
 <div class="wrap">
@@ -111,6 +141,83 @@ header.hero { display: grid; gap: 18px; padding-block: 8px 32px; }
         the HRRR analysis at its altitude.</p>
     </aside>
   </div>
+
+  <section aria-labelledby="h-aircraft">
+    <div class="eyebrow">The aircraft</div>
+    <h2 id="h-aircraft">Ten flights, each matched to the streak it left</h2>
+    <p class="lede">Every one was an airliner or business jet, nine of them landing. They crossed the
+      cloud at about 3 km, in air at &minus;15 to &minus;18&nbsp;&deg;C, and their snow showed up on the
+      radar a quarter of an hour to three quarters of an hour later.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Flight</th><th scope="col">Type</th><th scope="col">Phase</th>
+          <th scope="col">Passed (UTC)</th><th scope="col">Altitude (ft)</th><th scope="col">Air (&deg;C)</th>
+          <th scope="col">Seen after (min)</th><th scope="col">Fall speed (m/s)</th><th scope="col">Streak (km)</th>
+          <th scope="col">Peak snow (mm/h)</th></tr></thead>
+        <tbody id="aircraft-rows"></tbody>
+      </table>
+    </div>
+    <p class="note">Altitude is pressure altitude. Fall speed is the height the ice had to fall to
+      reach the radar beam divided by the delay; snow crystals and flakes fall at 0.3&ndash;1.5 m/s.
+      Snowfall is water equivalent from the reflectivity, uncertain by a factor of a few.</p>
+  </section>
+
+  <section aria-labelledby="h-evidence">
+    <div class="eyebrow">The test</div>
+    <h2 id="h-evidence">How we know it was the aircraft</h2>
+    <div class="two-col">
+      <div class="prose">
+        <p>A thin line of snow near a busy airport will often lie along <em>some</em> flight path by
+          coincidence. So every comparison is repeated with all of the day's flights rotated around the
+          radar to other bearings: same shapes, same timing, same wind, wrong place. Rotated flights
+          match streaks too, and that is the chance level.</p>
+        <p>A match counts only if the streak lies along the flight's own track carried by the wind,
+          the air there was clear before the aircraft arrived, the air was below &minus;4&nbsp;&deg;C, and
+          the ice would have had to fall at the speed snow falls to reach the radar beam when it did.</p>
+        <p>Of <span id="n-objects">–</span> streak-shaped echoes that day, the real flights explained
+          <strong><span id="n-flights">–</span></strong> at a level the rotated copies reach
+          <strong><span id="n-expected">–</span></strong> times on average.</p>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><b id="e-real">–</b><span>evidence score of the real flights</span></div>
+        <div class="stat"><b id="e-null">–</b><span>typical score of rotated copies (95% below <span id="e-q95">–</span>)</span></div>
+        <div class="stat"><b>0 of <span id="n-rot">–</span></b><span>rotated copies that did as well</span></div>
+      </div>
+    </div>
+    <p class="note">What this does not prove: rotating flights also breaks any link between airport
+      corridors and weather that lines up with them for other reasons. On one warm July day, when no
+      aircraft can make snow, the real flights still beat 199 of 200 rotations. How often that happens
+      is measured below, on warm days at every radar in the census.</p>
+  </section>
+
+  <section aria-labelledby="h-physics">
+    <div class="eyebrow">The physics</div>
+    <h2 id="h-physics">A streak lives about an hour, and colder air makes more of them</h2>
+    <div class="two-col">
+      <figure class="chart" style="margin:0">
+        <div id="chart-lifecycle"></div>
+        <div class="chart-legend"><span><i class="sw band"></i>90% range over the ten flights</span></div>
+        <figcaption class="note">Radar echo on each matched flight's wind-carried track, minus the
+          echo 5&ndash;8 km to either side, followed through every scan. Between 10 and 50 minutes the
+          curve partly reflects how flights were chosen; its rise before and fall after do not.</figcaption>
+      </figure>
+      <figure class="chart" style="margin:0">
+        <div id="chart-efficiency"></div>
+        <div class="chart-legend"><span><i class="sw fill"></i>jets that left a streak</span>
+          <span><i class="sw ring"></i>same jets rotated (chance)</span></div>
+        <figcaption class="note">Jets entering clear air in the cloud layer that afternoon and evening.
+          Warmer bins include flights below the cloud base, so this shows the trend, not a threshold.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <footer class="sources">
+    <div>Data: ADS-B positions from adsb.lol (ODbL); NEXRAD Level II and III radar (NOAA, via AWS Open Data);
+      HRRR analyses (NOAA, University of Utah archive); aircraft types from tar1090-db; METARs from the Iowa
+      Environmental Mesonet.</div>
+  </footer>
 </div>
 <script type="application/json" id="replay-data">{{REPLAY_JSON}}</script>
+<script type="application/json" id="page-data">{{PAGE_JSON}}</script>
 <script>{{REPLAY_JS}}</script>
+<script>{{CHARTS_JS}}</script>
