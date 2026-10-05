@@ -11,6 +11,7 @@ stdout; tracebacks to stderr.
 import argparse
 import concurrent.futures as cf
 import datetime as dt
+import signal
 import sys
 import traceback
 
@@ -57,6 +58,13 @@ def main():
     n = 0
     futs = []
     with cf.ProcessPoolExecutor(a.workers) as ex:
+        def stop(signum, frame):
+            # worker processes do not die with the parent on their own: terminate them
+            for proc in list(getattr(ex, "_processes", {}).values()):
+                proc.terminate()
+            ex.shutdown(wait=False, cancel_futures=True)
+            sys.exit(1)
+        signal.signal(signal.SIGTERM, stop)
         d = d0
         while d <= d1:
             if (d - d0).days % a.step:
