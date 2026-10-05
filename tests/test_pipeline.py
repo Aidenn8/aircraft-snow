@@ -12,6 +12,21 @@ census_summary = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(census_summary)
 
 
+def test_empirical_null_recovers_a_shifted_wide_null():
+    rng = np.random.default_rng(3)
+    z = np.r_[rng.normal(0.5, 1.6, 600), np.full(12, 12.0)]       # 600 null days, 12 strong events
+    fit = census_summary.fit_null(z)
+    assert abs(fit["centre"] - 0.5) < 0.25 and abs(fit["width"] - 1.6) < 0.25
+    p = census_summary.tail_p(z, fit)
+    sel = census_summary.benjamini_hochberg(p, 0.05)
+    assert sel[-12:].all()                                            # the events are found
+    assert sel[:600].sum() <= 3                                       # few null days are
+    # the theoretical N(0, 1) null would have picked many null days
+    assert census_summary.benjamini_hochberg(
+        np.where(np.isfinite(z), census_summary.stats.norm.sf(z), 1.0), 0.05)[:600].sum() > 20
+    assert census_summary.tail_p(np.array([np.nan]), fit)[0] == 1.0
+
+
 def test_benjamini_hochberg_known_case():
     # n = 8, q = 0.05: step-up thresholds 0.00625, 0.0125, 0.01875, ... ; only the two
     # smallest p (0.001 <= 0.00625, 0.008 <= 0.0125) pass, and no larger k does
