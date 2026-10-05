@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aircraft-snow"
+version = "0.1.0"
+description = "A census of snowfall caused by aircraft near US airports, from open radar and flight-tracking data"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy", "pandas", "pyarrow", "requests", "matplotlib", "scipy", "shapely", "pyproj",
+    "metpy", "xarray", "numcodecs", "scikit-image",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["snow"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
