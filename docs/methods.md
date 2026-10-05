@@ -109,18 +109,24 @@ precipitation is not uniform. It is therefore not used in the census
    8-16 km in 8 directions keeps orientation exactly; both placebo families are compared on
    the same tracks (within 49 km of the radar, so shifted copies stay in the domain).
 
-Census selection (scripts/census_summary.py): every radar-day keeps its 24-rotation
-screening score. The gamma-tail p-value is calibrated empirically: each rotation, scored
-against the other rotations of its day, gives a null p-value; pooled over all tested days
-these give the calibrated p-value of each real day, (1 + count of pooled null p-values at
-or below it) / (1 + their number). Event days are selected by Benjamini-Hochberg at FDR 5%
-on the calibrated p-values; a day that screens at rank p <= 0.05 or gamma p <= 0.1 is
-re-run with 200 rotations for its per-flight catalogue and false discovery rates.
+Census selection (scripts/census_summary.py). A day's p-value is the gamma-tail estimate
+from its 200-rotation run if it was confirmed (screen rank p <= 0.05 or gamma p <= 0.1),
+else from its 24-rotation screen, else (too few positive null scores for a fit) the rank
+p-value. These are valid under the rotation null, but with some 15-25 independent
+rotations per day nothing far below ~0.001 is resolved, while naming single days at a 5%
+false discovery rate across ~800 tested days would need ~1e-4. So the census estimates how
+many days had aircraft snow from the excess of small day p-values over the uniform
+distribution expected under no seeding (days at p <= 0.01 beyond 1%, with a Poisson
+interval; Storey's pi0 as a noisier estimate of all event days), reports
+Benjamini-Hochberg selections and Storey q-values, and ranks candidate days for
+inspection. The same summary of warm-season null days is the false-alarm check.
 
-Denver, 25-26 January 2025 (analysis day from 12 UTC, final method): 677 streak objects,
-63 matched to a flight; E = 78 against a null median of 29 and 95th percentile of 48; no
-rotation of 200 reached it (rank p < 0.005, gamma tail p = 2e-4). At p <= 0.005, 14 flights
-(16 streaks), all jets, with 0.7 expected false (FDR 5%).
+Denver, 25-26 January 2025 (analysis day from 12 UTC, final method with the echo mask,
+exclusion zone and floored p-values): 685 streak objects, 65 matched to a flight; E = 78.7
+against a null median of 34; no rotation of 200 reached it (rank p = 1/201, gamma tail
+0.0013); time-reversed diagnostic p = 0.12. At p <= 0.01, 16 flights matched their streaks
+against 3.6 expected by chance (about 12 more than chance; FDR 23%); at p <= 0.05, 29
+against 10.5.
 
 ## The Denver case in physical terms
 
