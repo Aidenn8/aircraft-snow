@@ -154,7 +154,103 @@
     set("n-rot", c.n_rotations);
   }
 
-  function drawAll() { lifecycle(); efficiency(); }
+  // ---- census: event days by radar and winter ----
+  function censusRates() {
+    const box = document.getElementById("chart-census");
+    const C = data.census;
+    if (!box || !C || !C.rates) return;
+    box.innerHTML = "";
+    const rates = C.rates;
+    const winters = [...new Set(rates.map((r) => r.winter))].sort();
+    const sites = [...new Set(rates.map((r) => r.site))];
+    const total = (s) => rates.filter((r) => r.site === s).reduce((a, r) => a + r.event_days, 0);
+    sites.sort((a, b) => total(b) - total(a));
+    const colours = [css("--seed"), css("--accent-ink"), css("--muted")];
+    const W = 640, H = 300, m = { l: 56, r: 16, t: 14, b: 44 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Event days per radar and winter" }, box);
+    const ymax = Math.max(1, ...rates.map((r) => r.event_days));
+    const top = Math.ceil(ymax * 1.15);
+    const band = (W - m.l - m.r) / sites.length;
+    const bw = Math.min(18, (band * 0.8) / winters.length);
+    const ys = (v) => m.t + (top - v) / top * (H - m.t - m.b);
+    const step = top <= 6 ? 1 : Math.ceil(top / 5);
+    const ticks = []; for (let t = 0; t <= top; t += step) ticks.push(t);
+    frame(svg, W, H, m, (v) => v, ys, [], ticks, "", "event days", (t) => t, (t) => t);
+    sites.forEach((s, i) => {
+      const cx = m.l + band * (i + 0.5);
+      const lab = el("text", { x: cx, y: H - m.b + 18, "text-anchor": "middle", class: "tick" }, svg);
+      lab.textContent = s;
+      winters.forEach((w, j) => {
+        const r = rates.find((q) => q.site === s && q.winter === w);
+        if (!r) return;
+        const x = cx + (j - (winters.length - 1) / 2) * (bw + 2) - bw / 2;
+        const y = ys(r.event_days);
+        const h = Math.max(ys(0) - y, r.event_days > 0 ? 2 : 0);
+        el("rect", { x, y: ys(0) - h, width: bw, height: h, rx: 2, fill: colours[j % colours.length] }, svg);
+        const hit = el("rect", { x: x - 2, y: m.t, width: bw + 4, height: H - m.t - m.b, fill: "transparent" }, svg);
+        hit.addEventListener("mousemove", (e) => showTip(e, `<b>${s}, winter ${w}</b><br>${r.event_days} event days ` +
+          `of ${r.tested} tested (${r.radar_days} radar-days)`));
+        hit.addEventListener("mouseleave", hideTip);
+      });
+    });
+    const leg = document.getElementById("legend-census");
+    if (leg) leg.innerHTML = winters.map((w, j) =>
+      `<span><i class="sw" style="border-radius:2px;background:${colours[j % colours.length]}"></i>winter ${w}</span>`).join("");
+  }
+
+  // ---- census: seeding temperature by engine class ----
+  function censusTemps() {
+    const box = document.getElementById("chart-temps");
+    const S = (data.census && data.census.seeders) || [];
+    if (!box || !S.length) return;
+    box.innerHTML = "";
+    const classes = ["jet", "turboprop", "piston"].filter((c) => S.some((r) => r.engine_class === c));
+    const W = 640, H = 260, m = { l: 90, r: 16, t: 14, b: 44 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Seeding temperature of each flight by engine class" }, box);
+    const x0 = 0, x1 = -30;
+    const xs = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+    const row = (H - m.t - m.b) / classes.length;
+    frame(svg, W, H, m, xs, (v) => v, [0, -5, -10, -15, -20, -25, -30], [], "air temperature where the aircraft seeded (°C)", "",
+          (t) => minus(t), (t) => t);
+    classes.forEach((c, i) => {
+      const cy = m.t + row * (i + 0.5);
+      const v = S.filter((r) => r.engine_class === c && r.seed_temp_c != null);
+      const lab = el("text", { x: m.l - 10, y: cy + 4, "text-anchor": "end", class: "axis-label" }, svg);
+      lab.textContent = `${c}s (${v.length})`;
+      v.forEach((r, k) => {
+        const jitter = ((k * 37) % 17) / 17 - 0.5;
+        const dot = el("circle", { cx: xs(r.seed_temp_c), cy: cy + jitter * row * 0.5, r: 4,
+                                   fill: c === "jet" ? css("--seed") : css("--accent-ink"), opacity: 0.8 }, svg);
+        dot.addEventListener("mousemove", (e) => showTip(e, `<b>${r.callsign} (${r.icao_type})</b><br>${r.site} ${r.day}<br>` +
+          `${minus(fmt(r.seed_temp_c, 1))} °C at ${Math.round(r.seed_alt_ft / 100) * 100} ft`));
+        dot.addEventListener("mouseleave", hideTip);
+      });
+      if (v.length) {
+        const med = v.map((r) => r.seed_temp_c).sort((a, b) => a - b)[Math.floor(v.length / 2)];
+        el("line", { x1: xs(med), x2: xs(med), y1: cy - row * 0.35, y2: cy + row * 0.35, stroke: css("--ink"), "stroke-width": 2 }, svg);
+      }
+    });
+  }
+
+  function censusNumbers() {
+    const C = data.census;
+    const sec = document.getElementById("census");
+    if (!C || !sec) return;
+    sec.hidden = false;
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    const r = C.rates || [];
+    set("c-radar-days", r.reduce((a, q) => a + q.radar_days, 0).toLocaleString());
+    set("c-tested", r.reduce((a, q) => a + q.tested, 0).toLocaleString());
+    set("c-events", r.reduce((a, q) => a + q.event_days, 0));
+    set("c-seeders", (C.seeders || []).length);
+    if (C.null) {
+      set("c-null-days", C.null.tested.toLocaleString());
+      set("c-null-selected", C.null.selected);
+    }
+  }
+
+  function drawAll() { lifecycle(); efficiency(); censusRates(); censusTemps(); }
+  censusNumbers();
   aircraftTable();
   fillNumbers();
   drawAll();

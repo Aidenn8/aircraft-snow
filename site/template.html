@@ -82,7 +82,7 @@ header.hero { display: grid; gap: 18px; padding-block: 8px 32px; }
 .prose p { color: var(--ink-2); }
 .prose strong { color: var(--ink); font-weight: 600; }
 .stat-row { display: flex; flex-wrap: wrap; gap: 28px; }
-.stat { display: grid; gap: 2px; }
+.stat { display: grid; gap: 2px; align-content: start; }
 .stat b { font: 600 var(--step-3)/1 var(--font-display); color: var(--ink); font-variant-numeric: tabular-nums; }
 .stat > span { font-size: 0.85rem; color: var(--muted); max-width: 22ch; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); }
@@ -207,6 +207,34 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
           <span><i class="sw ring"></i>same jets rotated (chance)</span></div>
         <figcaption class="note">Jets entering clear air in the cloud layer that afternoon and evening.
           Warmer bins include flights below the cloud base, so this shows the trend, not a threshold.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="census" aria-labelledby="h-census" hidden>
+    <div class="eyebrow">The census</div>
+    <h2 id="h-census">Eight airports, every winter day</h2>
+    <p class="lede">The same detector, run without a person looking, on every winter day at eight radars
+      near major airports. A day counts as an aircraft-snow day only if its evidence survives a 5%
+      false discovery rate across all the days tested.</p>
+    <div class="stat-row">
+      <div class="stat"><b id="c-radar-days">–</b><span>radar-days examined</span></div>
+      <div class="stat"><b id="c-tested">–</b><span>with cold, moist air and echo, so tested</span></div>
+      <div class="stat"><b id="c-events">–</b><span>aircraft-snow days</span></div>
+      <div class="stat"><b id="c-seeders">–</b><span>flights matched to streaks on those days</span></div>
+      <div class="stat"><b id="c-null-selected">–</b><span>of <span id="c-null-days">–</span> warm summer
+        radar-days, when no aircraft can make snow, that the same selection would have picked</span></div>
+    </div>
+    <div class="two-col">
+      <figure class="chart" style="margin:0">
+        <div id="chart-census"></div>
+        <div class="chart-legend" id="legend-census"></div>
+        <figcaption class="note">Aircraft-snow days per radar and winter (November to March).</figcaption>
+      </figure>
+      <figure class="chart" style="margin:0">
+        <div id="chart-temps"></div>
+        <figcaption class="note">HRRR temperature where each matched flight seeded; the bar is the
+          median. Each dot is one flight; hover for details.</figcaption>
       </figure>
     </div>
   </section>
