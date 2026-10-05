@@ -21,10 +21,14 @@ def main():
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--null-alt", type=float, default=None,
                     help="null mode: only tracks below this altitude (ft), no screens")
+    ap.add_argument("--step", type=int, default=1, help="run every STEP-th day")
     a = ap.parse_args()
     d = dt.date.fromisoformat(a.start)
     end = dt.date.fromisoformat(a.end)
     while d <= end:
+        if (d - dt.date.fromisoformat(a.start)).days % a.step:
+            d += dt.timedelta(days=1)
+            continue
         need = [d, d + dt.timedelta(days=1)]
         if not all(adsb.day_path(x).exists() for x in need):
             print(f"{a.site} {d}: skipped (no ADS-B)", flush=True)

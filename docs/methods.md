@@ -60,31 +60,70 @@ check, but is not the main detector.
 1. Streak objects are found in each scan without reference to aircraft: Gaussian smoothing
    (0.75 km), white top-hat with a 4 km disk (removes broad precipitation), threshold
    (top-hat >= 6 dB and >= 3 dBZ), cleanup, then shape by skeleton: main path >= 8 km,
-   mean width <= 3.5 km, branchiness <= 2.5. Skeleton measures accept the U-shaped
-   streaks left by approach patterns.
+   mean width <= 3.5 km, main path >= 4 x mean width, branchiness <= 2.5. Skeleton
+   measures accept the U-shaped streaks left by approach patterns.
 2. Fixed echoes are removed: objects lying mostly on pixels that are inside streak objects
    in >= 40% of the day's scans (ground clutter on terrain edges).
 3. Each object is compared with every flight that passed 10-50 min earlier. Tracks are
    interpolated to 250 m spacing and drifted with the HRRR drift plus a perturbation of
    up to +-1 m/s (0.5 m/s steps). Coverage (share of the object's centre line within 1 km
    of the drifted track) and precision (share of the drifted track near the object that is
-   on it) are combined as F1.
+   on it) are combined as F1. Points slower than 80 kt are not used: helicopters and slow
+   aircraft loop over small areas, so their drifted "lines" are blobs that fit any echo
+   (one such helicopter produced the only false-alarm day during development).
 4. Newness: the object, moved back with the drift, must have been echo-free (>= 70% of
    samples < 0 dBZ) in the scans 3-30 min before the flight passed. In a stream of aircraft
    the match is therefore the first aircraft through new cloud.
 5. Chance: the whole procedure is repeated with all flights rotated about the radar
-   (24 rotations to screen a day, 200 to confirm). A day is scored by E = sum over objects of
-   -log10 p; its null distribution treats each rotation in turn as the real set.
+   (24 rotations to screen a day, 200 to confirm a day that screens at p <= 0.05). A day is
+   scored by E = sum over matched flights of -log10 of each flight's best streak p-value (a
+   flight matched to the same echo in many scans counts once). Its null distribution treats
+   each rotation in turn as the real set. The rank p-value cannot go below 1/(R + 1); a
+   gamma distribution fitted to the null scores gives a smooth tail estimate for ranking
+   days across the census (its calibration is checked on null days).
+6. False discovery rate within a day: for a p-value threshold, the expected number of
+   falsely matched flights is the mean number each rotation produces when treated as real.
+7. Time-reversed diagnostic: the same matching with aircraft that pass 10-50 min after each
+   scan (no newness test). They cannot have made the echo, so an excess over rotations would
+   reveal streak-like echoes aligned with traffic corridors for other reasons.
 
-Denver (full day): 896 streak objects, 81 matched; E = 104 against a null median of 43 and
-95th percentile of 70; no rotation reached the real value.
+Denver, 25-26 January 2025 (analysis day from 12 UTC, final method): 677 streak objects,
+63 matched to a flight; E = 78 against a null median of 29 and 95th percentile of 48; no
+rotation of 200 reached it (rank p < 0.005, gamma tail p = 2e-4). At p <= 0.005, 14 flights
+(16 streaks), all jets, with 0.7 expected false (FDR 5%).
+
+## The Denver case in physical terms
+
+- Seeding flights: CRJ-200, E175, A319/A320, 737-800/MAX 8, 757, 787-9, Citation Latitude;
+  mostly arrivals; seeding altitudes 6 800-13 200 ft (pressure altitude); HRRR temperature at
+  the seeding points -12 to -18.5 C, mostly -16 to -18.5 C.
+- Streaks appeared at the lowest tilt 13-46 min after passage, were 9-30 km long and ~2-3 km
+  wide, with peak reflectivity 14-29 dBZ (roughly 0.5-2.7 mm/h liquid equivalent with
+  Ze = 110 S^2, Wolfe & Snider 2012; uncertain by a factor of a few).
+- Composite over the matched flights: the drifted track stands 7-10 dB above lines 5-8 km
+  to either side from ~17 to ~52 min after passage and is back to background by ~60 min.
+  (The 10-50 min matching window and the newness test shape the composite's onset, so only
+  its width and decay are free of selection.)
+- Dual polarisation (Level II, lowest tilt): streak snow has lower differential
+  reflectivity than other echo of the same reflectivity (median ZDR 0.22 vs 0.44 dB at
+  10-20 dBZ; correlation coefficient ~1.00 vs 0.99), i.e. rounder, aggregated particles,
+  in line with Moisseev et al. (2019) at Helsinki. Gates are not independent; per-streak
+  medians are the fair comparison.
+- Efficiency: of 48 jets that first crossed the -17 to -20 C layer (air echo-free before
+  they arrived), 62% left a streak along their drifted track against 10% for the same
+  flights rotated about the radar. Most flights in warmer bins flew below the cloud base, so
+  this is not yet a temperature dependence.
+- Surface reports (Buckley SFB, DEN, Centennial) show light snow on and off all evening, so
+  the aircraft contribution cannot be separated at the ground from hourly METARs.
 
 ## Calibration
 
 - Synthetic streaks injected along real flights' drifted tracks into real radar on quiet
   days (inject.py: Gaussian cross-section 0.5 km growing 0.2 m/s, onset 15 min, peak 35 min,
-  gone at 90 min, wind error 0.7 m/s per component). Recall on three quiet Denver days
-  (120 trials): 23% at 5 dBZ peak, 93% at 10 dBZ, 97% at 15 dBZ, 79% at 20 dBZ.
+  gone at 90 min, wind error 0.7 m/s per component). Recall of the final method on three
+  quiet Denver days (120 trials, recovery = matched at p <= 0.05 against 101 rotations):
+  5/31 at 5 dBZ peak (16%), 35/37 at 10 dBZ (95%), 22/26 at 15 dBZ (85%), 22/26 at 20 dBZ
+  (85%).
 - False alarms: the same pipeline on July days restricted to tracks below 13 000 ft, where
   the air is above freezing and aircraft cannot seed (null mode).
 
@@ -100,3 +139,10 @@ Denver (full day): 896 streak objects, 81 matched; E = 104 against a null median
   are what make the single-flight match specific.
 - Heatmap positions are 2-6 km apart at airliner speeds; tracks must be interpolated before
   any geometric comparison at 1 km tolerance.
+- Counting every streak object in every scan lets one persistent coincidence count many
+  times; scoring flights, not objects, fixed the helicopter false alarm.
+- numpy.isclose on epoch seconds is not an equality test (rtol 1e-5 x 1.7e9 s = 4.7 h);
+  scan matching uses an absolute tolerance.
+- Many airliners broadcast an outside air temperature, but it is derived from Mach and true
+  airspeed and is unreliable below Mach ~0.5, so it cannot check HRRR at approach speeds.
+- The Denver radiosonde archive ends in July 2022, so HRRR is the only profile source there.
