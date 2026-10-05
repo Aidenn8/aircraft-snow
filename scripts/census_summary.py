@@ -18,13 +18,13 @@ calibrated p-value, the share of pooled null p-values at or below its own, (1 + 
 below 1/(1 + N).
 
 This checks the tail approximation, not whether the real flights are exchangeable with
-rotated ones. They are not always: on a warm null day the rotation test reached p = 0.01
-(docs/methods.md), because rotation also breaks links between corridors and echo that are
-not seeding. So a day selected on rotations is an event day only if it is confirmed by the
-day-swap test (dayswap_null.py: other days' flights on this day's radar and wind), with
-gamma-tail p <= --swap-alpha. This is an intersection-union rule: a confound that makes the
-rotation p-value too small leaves the day-swap p-value valid (conservative). Selected days
-without a day-swap result yet are reported as pending.
+rotated ones. That is checked on warm-season null days at the same radars, where aircraft
+cannot seed (run this script on data/events_null): the share of null days the selection
+would pick is the false-alarm rate. A day-swap result (dayswap_null.py: other days' flights
+on this day's radar and wind), where present, is reported (p_swap, p_swap_gamma) but not
+required: because airline schedules repeat daily, other days' flights fly almost the same
+paths at the same times and fit real aircraft streaks nearly as well, so that test cannot
+attribute a streak to one aircraft (docs/methods.md).
 
 Outputs (in --out):
   radar_days.csv    one row per radar-day: screens, tests, reversed diagnostic, p-values
@@ -138,7 +138,6 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "data" / "census"))
     ap.add_argument("--q", type=float, default=0.05)
     ap.add_argument("--alpha", type=float, default=0.005)
-    ap.add_argument("--swap-alpha", type=float, default=0.05)
     a = ap.parse_args()
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -169,12 +168,10 @@ def main():
     tested["event_cal"] = benjamini_hochberg(tested.p_cal.to_numpy(float), a.q)
     if "p_swap_gamma" not in tested:
         tested["p_swap_gamma"] = np.nan
-    tested["swap_pass"] = tested.p_swap_gamma <= a.swap_alpha
-    tested["swap_pending"] = tested.selected_rot & tested.p_swap_gamma.isna()
-    tested["event"] = tested.selected_rot & tested.swap_pass
-    keep = ["site", "day", "p_final", "p_cal", "selected_rot", "swap_pass", "swap_pending", "event", "event_cal"]
+    tested["event"] = tested.selected_rot
+    keep = ["site", "day", "p_final", "p_cal", "event", "event_cal"]
     rd = rd.merge(tested[keep], on=["site", "day"], how="left")
-    for c in ("selected_rot", "swap_pass", "swap_pending", "event", "event_cal"):
+    for c in ("event", "event_cal"):
         rd[c] = rd[c].fillna(False).astype(bool)
     rd.to_csv(out / "radar_days.csv", index=False)
     ev = tested[tested.event]
@@ -188,9 +185,8 @@ def main():
     print(f"real days: screening rank p <= 0.05: {np.mean(tested.p_screen <= 0.05):.3f}; "
           f"final gamma p <= 0.05: {np.mean(tested.p_final <= 0.05):.3f}; reversed rank p <= 0.05: "
           f"{np.mean(tested.p_rev.dropna() <= 0.05):.3f}")
-    print(f"selected on rotations (BH q={a.q}): {int(tested.selected_rot.sum())} "
-          f"({int(tested.event_cal.sum())} on empirically calibrated p); confirmed by day-swap "
-          f"(gamma p <= {a.swap_alpha}): {len(ev)} event days; day-swap pending: {int(tested.swap_pending.sum())}")
+    print(f"event days (BH q={a.q}): {len(ev)} on gamma-tail p; {int(tested.event_cal.sum())} on "
+          f"empirically calibrated p")
     rows = []
     for _, d in ev.iterrows():
         path = pathlib.Path(a.events) / d.site / f"{d.day}_streaks.parquet"
