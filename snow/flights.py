@@ -74,14 +74,14 @@ def segment(pos: pd.DataFrame, gap_s: float = GAP_S) -> pd.DataFrame:
 
 
 def densify(points: pd.DataFrame, step_m: float = 250.0, max_gap_s: float = 60.0,
-            columns=("x", "y", "t", "alt_ft", "p_hpa")) -> pd.DataFrame:
+            columns=("x", "y", "t", "alt_ft", "p_hpa", "gs")) -> pd.DataFrame:
     """Linearly interpolate each flight's track so consecutive points are at most step_m
     apart (heatmap positions are 10-30 s apart, i.e. up to several km at airliner speeds).
     Pairs more than max_gap_s apart are not bridged. Keeps the flight column and adds
     `src`, the index of the original point each new point starts from."""
     p = points.sort_values(["flight", "t"])
     fl = p.flight.to_numpy()
-    cols = {c: p[c].to_numpy(float) for c in columns}
+    cols = {c: p[c].to_numpy(float) for c in columns if c in p}
     src = p.index.to_numpy()
     same = (fl[1:] == fl[:-1]) & (np.diff(cols["t"]) <= max_gap_s)
     dist = np.hypot(np.diff(cols["x"]), np.diff(cols["y"]))

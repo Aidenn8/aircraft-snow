@@ -5,7 +5,27 @@ from snow import match
 
 
 def _table(real, plac):
-    return pd.DataFrame({"coverage": real, "placebo_cov": list(plac)})
+    """Synthetic streak table: every streak matched by a different flight in every set
+    (so per-flight aggregation reduces to per-streak)."""
+    n, R = plac.shape
+    flight = np.where(real > 0, np.arange(n), -1)
+    pf = np.where(plac > 0, 1000 * (1 + np.arange(R))[None, :] + np.arange(n)[:, None], -1)
+    return pd.DataFrame({"coverage": real, "flight": flight, "placebo_cov": list(plac),
+                         "placebo_flight": list(pf)})
+
+
+def test_day_statistic_counts_each_flight_once():
+    """The same flight matched to one echo in five scans must count once, like one match."""
+    rng = np.random.default_rng(5)
+    R = 40
+    plac = np.where(rng.random((6, R)) < 0.3, rng.random((6, R)) * 0.6, 0.0)
+    real = np.r_[np.full(5, 0.9), 0.0]
+    t = _table(real, plac)
+    t["flight"] = [7, 7, 7, 7, 7, -1]                    # one flight, five scans
+    single = _table(real[:1], plac[:1])
+    single["flight"] = [7]
+    assert len(match.per_flight_min_p(match.pseudo_pvalues(t), match.flight_matrix(t), 0)) == 1
+    assert np.isclose(match.day_statistic(t)["E"], match.day_statistic(single)["E"])
 
 
 def test_day_statistic_null_is_calibrated():
@@ -42,6 +62,35 @@ def test_empirical_fdr_null_and_signal():
     real[:40] = 1.0                                        # 40 genuine streaks beat every placebo
     f = match.empirical_fdr(_table(real, allc[:, 1:]), thresholds=(0.05,))
     assert f.n_real.iloc[0] >= 40 and f.fdr.iloc[0] < 0.4 and f.excess.iloc[0] > 30
+
+
+def _exact_coverage(sx, sy, px, py, tol):
+    d = np.hypot(sx[:, None] - px[None, :], sy[:, None] - py[None, :])
+    return float((d.min(axis=1) <= tol).mean())
+
+
+def test_candidates_coverage_matches_exact_computation():
+    sx = np.arange(0, 21000, 500.0)              # straight skeleton, 500 m pixels
+    sy = np.zeros_like(sx)
+    xs_trk = np.arange(-2000, 23000, 250.0)      # interpolated track, 250 m spacing
+    tracks = {
+        1: (xs_trk, np.full_like(xs_trk, 600.0)),             # parallel, 0.6 km off: matches
+        # parallel, 5 km off: beyond TOL plus the largest drift correction (1 m/s x 30 min)
+        2: (xs_trk, np.full_like(xs_trk, 5000.0)),
+        3: (np.linspace(5000, 15000, 81), np.linspace(-8000, 8000, 81)),   # crossing
+    }
+    x = np.concatenate([v[0] for v in tracks.values()])
+    y = np.concatenate([v[1] for v in tracks.values()])
+    flight = np.concatenate([np.full(len(v[0]), k) for k, v in tracks.items()])
+    t = np.zeros(len(x))
+    drift = np.zeros((len(x), 2))
+    T = 30 * 60.0
+    cands = {c[1]: c for c in match._candidates(sx, sy, x, y, t, T, drift, flight)}
+    assert 1 in cands and 2 not in cands and 3 not in cands
+    f1, f, du, dv, t_pass, u, v, cov, prec = cands[1]
+    exact = _exact_coverage(sx, sy, tracks[1][0], tracks[1][1], match.TOL_M)
+    assert abs(cov - exact) < 0.05 and cov > 0.95
+    assert prec > 0.8
 
 
 def test_newness_quiet_and_echo():

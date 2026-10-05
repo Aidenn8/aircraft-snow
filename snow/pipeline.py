@@ -89,6 +89,7 @@ def prepare(site: str, day: dt.date, scans=None, alt_max_ft: float | None = None
 
 
 PERSISTENT_FRACTION = 0.4      # pixels inside streak objects in >= this share of scans
+MIN_MATCH_GS_KT = 80.0
 PERSISTENT_OVERLAP = 0.5       # objects mostly on such pixels are fixed echo, not snow
 SCREEN_ANGLES = tuple(np.linspace(20.0, 340.0, 24))
 CONFIRM_ANGLES = tuple(np.linspace(20.0, 340.0, 200))
@@ -125,6 +126,10 @@ def match_day(prep: dict, angles=SCREEN_ANGLES) -> pd.DataFrame:
     """Streak objects in every scan of the day (fixed echoes removed), each matched to its
     best new flight with rotation placebos."""
     G, pts, dr = prep["grids"], prep["points_dense"], prep["drift_dense"]
+    # slow points (helicopters, hovering, slow general aviation: < 80 kt) are excluded: their
+    # tracks loop over small areas, so their drifted "lines" are blobs that fit any echo
+    fast = ~((pts.gs.to_numpy() >= 0) & (pts.gs.to_numpy() < MIN_MATCH_GS_KT * 10))
+    pts, dr = pts[fast].reset_index(drop=True), dr[fast]
     kept, _, xs, ys = streak_objects_day(prep)
     rows = [match.match_streaks(G, G.t[k], lab, obj, xs, ys, pts, dr, angles=angles)
             for k, obj, lab in kept]
@@ -132,8 +137,35 @@ def match_day(prep: dict, angles=SCREEN_ANGLES) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
+def drop_radar_cache(site: str, day: dt.date):
+    """Delete this radar-day's cached Level III files (they can be fetched again)."""
+    t0, t1 = day_window(day)
+    site3 = site[1:]
+    lo, hi = t0 - dt.timedelta(minutes=30), t1 + dt.timedelta(minutes=60)
+    n = 0
+    for d in {lo.date(), hi.date()}:
+        for p in (radar.CACHE / "l3").glob(f"{site3}_N0B_{d:%Y_%m_%d}_*"):
+            t = dt.datetime.strptime(p.name[-19:], "%Y_%m_%d_%H_%M_%S").replace(tzinfo=UTC)
+            if lo <= t <= hi:
+                p.unlink()
+                n += 1
+    return n
+
+
 def run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
-            null_alt_max_ft: float | None = None) -> dict:
+            null_alt_max_ft: float | None = None, keep_radar: bool | None = None) -> dict:
+    """Run both tests for one radar-day (see below). Unless keep_radar is True, the day's
+    cached radar files are deleted afterwards when neither test reaches p <= 0.05."""
+    summary = _run_day(site, day, save, force, null_alt_max_ft)
+    interesting = (summary.get("streaks", {}).get("p_day", 1.0) <= 0.05
+                   or summary.get("stats", {}).get(event.PRIMARY, {}).get("p_cluster", 1.0) <= 0.05)
+    if keep_radar is False or (keep_radar is None and not interesting):
+        drop_radar_cache(site, day)
+    return summary
+
+
+def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
+             null_alt_max_ft: float | None = None) -> dict:
     """Run both tests for one radar-day. With null_alt_max_ft set (null mode, for
     false-alarm calibration on warm days), only tracks below that altitude are used, the
     screens are skipped and results go to data/events_null/."""

@@ -69,6 +69,14 @@ def _candidates(sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None):
     best = {}
     lo_x, hi_x = sx.min() - NEAR_M, sx.max() + NEAR_M
     lo_y, hi_y = sy.min() - NEAR_M, sy.max() + NEAR_M
+    # conservative prefilter: no perturbation moves a point by more than max|d| * sqrt(2) * age
+    bx = x + drift[:, 0] * age
+    by = y + drift[:, 1] * age
+    reach = max(abs(p) for p in DRIFT_PERTURB_MS) * np.sqrt(2) * age
+    pre = (bx > lo_x - reach) & (bx < hi_x + reach) & (by > lo_y - reach) & (by < hi_y + reach)
+    if not pre.any():
+        return []
+    x, y, t, drift, flight, age = x[pre], y[pre], t[pre], drift[pre], flight[pre], age[pre]
     for du, dv in itertools.product(DRIFT_PERTURB_MS, DRIFT_PERTURB_MS):
         px = x + (drift[:, 0] + du) * age
         py = y + (drift[:, 1] + dv) * age
@@ -83,17 +91,23 @@ def _candidates(sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None):
         idx, d, nearest = idx[near], d[near], nearest[near]
         fl = flight[idx]
         hit = d <= TOL_M
-        for f in np.unique(fl[hit]):
+        if not hit.any():
+            continue
+        # vectorised over flights: precision = hits / near points; coverage = distinct
+        # skeleton pixels that are some hit point's nearest pixel (tracks are interpolated
+        # to 250 m and the skeleton has 500 m pixels, so a track running along the streak is
+        # nearest to every pixel it covers)
+        uf, fi = np.unique(fl, return_inverse=True)
+        n_near = np.bincount(fi, minlength=len(uf))
+        n_hit = np.bincount(fi[hit], minlength=len(uf))
+        pairs = np.unique(fi[hit] * n_sk + nearest[hit])
+        n_cov = np.bincount(pairs // n_sk, minlength=len(uf))
+        prec_all = n_hit / np.maximum(n_near, 1)
+        cov_all = n_cov / n_sk
+        for j in np.nonzero((prec_all >= MIN_COVERAGE) & (cov_all >= MIN_COVERAGE))[0]:
+            f = uf[j]
+            prec, cov = float(prec_all[j]), float(cov_all[j])
             mf = fl == f
-            prec = float(hit[mf].mean())
-            if prec < MIN_COVERAGE:
-                continue
-            # skeleton pixels within TOL of any of the flight's points
-            sel = idx[mf & hit]
-            covered = tree.query_ball_point(np.c_[px[sel], py[sel]], r=TOL_M)
-            cov = len(set().union(*covered)) / n_sk
-            if cov < MIN_COVERAGE:
-                continue
             f1 = 2 * cov * prec / (cov + prec)
             if f1 > best.get(f, (0,))[0]:
                 close = idx[mf & hit]
@@ -162,8 +176,9 @@ def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
             continue
         tree = cKDTree(np.c_[sx, sy])
         f1, f, du, dv, t_pass, q, cov, prec = best_new_match(grids, sx, sy, x, y, t, T, dr, fl, tree=tree)
-        plac = np.array([best_new_match(grids, sx, sy, x, y, t, T, dr, fl, rot=r, tree=tree)[0]
-                         for r in angles])
+        pm = [best_new_match(grids, sx, sy, x, y, t, T, dr, fl, rot=r, tree=tree) for r in angles]
+        plac = np.array([m_[0] for m_ in pm])
+        plac_flight = np.array([m_[1] for m_ in pm], np.int64)
         alt_med, p_med, n_seed = np.nan, np.nan, 0
         if f >= 0:
             mp = matched_points(sx, sy, points, drift, T, f, du, dv)
@@ -176,7 +191,7 @@ def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
                      "placebo_q95": float(np.quantile(plac, 0.95)),
                      "placebo_frac_matched": float(np.mean(plac > 0)),
                      "p_value": float((1 + np.sum(plac >= f1)) / (1 + len(plac))) if f1 > 0 else 1.0,
-                     "placebo_cov": plac.astype(np.float32)})
+                     "placebo_cov": plac.astype(np.float32), "placebo_flight": plac_flight})
     return pd.DataFrame(rows)
 
 
@@ -195,16 +210,41 @@ def pseudo_pvalues(table: pd.DataFrame) -> np.ndarray:
     return out
 
 
+def flight_matrix(table: pd.DataFrame) -> np.ndarray:
+    """Matched flight per streak for the real set (column 0) and each rotation (1..R);
+    -1 where nothing matched."""
+    F0 = table.flight.to_numpy(np.int64)
+    if "placebo_flight" in table:
+        FP = np.stack(table.placebo_flight.to_numpy()).astype(np.int64)
+    else:     # older tables: treat every placebo match as a distinct flight
+        CP = np.stack(table.placebo_cov.to_numpy())
+        FP = np.where(CP > 0, -2 - np.arange(CP.size).reshape(CP.shape), -1)
+    return np.concatenate([F0[:, None], FP], axis=1)
+
+
+def per_flight_min_p(P: np.ndarray, F: np.ndarray, col: int) -> np.ndarray:
+    """For one set (column), the smallest p over the streaks matched to each flight."""
+    f = F[:, col]
+    m = f != -1
+    if not m.any():
+        return np.array([])
+    s = pd.Series(P[m, col]).groupby(f[m]).min()
+    return s.to_numpy()
+
+
 def empirical_fdr(table: pd.DataFrame, thresholds=(0.005, 0.01, 0.02, 0.05)) -> pd.DataFrame:
-    """For each p-value threshold: the number of real streak matches at or below it, the
-    mean number the rotations produce when treated as real (the false matches expected
-    under 'no aircraft effect'), the implied false discovery rate and the estimated number
-    of true aircraft streaks (real minus expected false)."""
+    """For each p-value threshold: the number of real flights with a streak match at or
+    below it (each flight counted once, by its best streak), the mean number the rotations
+    produce when treated as real (false matches expected under 'no aircraft effect'), the
+    implied false discovery rate and the estimated number of genuinely seeding flights."""
     P = pseudo_pvalues(table)
+    F = flight_matrix(table)
+    R = P.shape[1] - 1
+    mins = [per_flight_min_p(P, F, j) for j in range(R + 1)]
     rows = []
     for tau in thresholds:
-        n_real = int((P[:, 0] <= tau).sum())
-        null = (P[:, 1:] <= tau).sum(axis=0)
+        n_real = int((mins[0] <= tau).sum())
+        null = np.array([(m <= tau).sum() for m in mins[1:]])
         exp_false = float(null.mean())
         rows.append({"threshold": tau, "n_real": n_real, "expected_false": exp_false,
                      "null_q95": float(np.quantile(null, 0.95)),
@@ -214,7 +254,9 @@ def empirical_fdr(table: pd.DataFrame, thresholds=(0.005, 0.01, 0.02, 0.05)) -> 
 
 
 def day_statistic(table: pd.DataFrame) -> dict:
-    """Combine all streaks of a radar-day: E = sum of -log10 p over streaks.
+    """Combine a radar-day's evidence: E = sum over matched flights of -log10 of the
+    flight's best streak p-value (a flight matched to the same echo in many scans counts
+    once).
 
     Null: under 'no aircraft effect' the real flight set is exchangeable with the rotated
     ones, so each rotation in turn is treated as the real set and scored against the other
@@ -224,9 +266,11 @@ def day_statistic(table: pd.DataFrame) -> dict:
         return {"E": 0.0, "p_day": 1.0, "n_streaks": 0, "n_matched": 0}
     C0 = table.coverage.to_numpy(float)
     P = pseudo_pvalues(table)                     # column 0 real, 1..R rotations as if real
+    F = flight_matrix(table)
     R = P.shape[1] - 1
-    E_all = -np.log10(P).sum(axis=0)
+    E_all = np.array([-np.log10(per_flight_min_p(P, F, j)).sum() for j in range(R + 1)])
     E_real, E_null = float(E_all[0]), E_all[1:]
     return {"E": E_real, "p_day": float((1 + np.sum(E_null >= E_real)) / (1 + R)),
+            "n_flights_matched": int(len(per_flight_min_p(P, F, 0))),
             "E_null_median": float(np.median(E_null)), "E_null_q95": float(np.quantile(E_null, 0.95)),
             "n_streaks": int(len(table)), "n_matched": int((C0 > 0).sum())}

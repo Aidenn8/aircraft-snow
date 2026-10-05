@@ -13,7 +13,8 @@ streaks (an approach path's downwind, base and final legs make a U) qualify:
     mean width    area / total length
     branchiness   total length / main length
 A component is a streak candidate when its main length is at least MIN_LENGTH_M, its mean
-width at most MAX_MEAN_WIDTH_M, its branchiness at most MAX_BRANCHINESS and its area at
+width at most MAX_MEAN_WIDTH_M, its branchiness at most MAX_BRANCHINESS, its main length at
+least MIN_ELONGATION times its mean width, and its area at
 least MIN_AREA_KM2.
 """
 from __future__ import annotations
@@ -36,6 +37,7 @@ MIN_DBZ = 3.0
 MIN_LENGTH_M = 8000.0
 MAX_MEAN_WIDTH_M = 3500.0
 MAX_BRANCHINESS = 2.5
+MIN_ELONGATION = 4.0      # main length / mean width (Denver streaks: 10-30 km x 2-3 km)
 MIN_AREA_KM2 = 4.0
 MIN_RANGE_M = 8000.0
 SMOOTH_M = 750.0
@@ -113,7 +115,8 @@ def find_streaks(g: GridScan) -> tuple[pd.DataFrame, np.ndarray]:
             continue
         L, L_tot = skeleton_lengths(rp.image)
         W = rp.area * GRID_RES_M ** 2 / L_tot
-        if L < MIN_LENGTH_M or W > MAX_MEAN_WIDTH_M or L_tot / L > MAX_BRANCHINESS:
+        if (L < MIN_LENGTH_M or W > MAX_MEAN_WIDTH_M or L_tot / L > MAX_BRANCHINESS
+                or L / W < MIN_ELONGATION):
             continue
         keep[rp.label] = True
         cy, cx = rp.centroid
