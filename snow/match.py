@@ -312,4 +312,7 @@ def day_statistic(table: pd.DataFrame) -> dict:
             **tail_pvalues(E_real, E_null),
             "n_flights_matched": int(len(per_flight_min_p(P, F, 0))),
             "E_null_median": float(np.median(E_null)), "E_null_q95": float(np.quantile(E_null, 0.95)),
+            # kept so that the tail estimates can be calibrated across days: each rotation,
+            # scored against the others, gives a null p-value (see census_summary.py)
+            "E_null": [round(float(e), 4) for e in E_null],
             "n_streaks": int(len(table)), "n_matched": int((C0 > 0).sum())}

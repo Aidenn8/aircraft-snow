@@ -230,6 +230,9 @@ def _run_day(site: str, day: dt.date, save: bool = True, force: bool = False,
     streak_table = match_day(prep, SCREEN_ANGLES)
     summary["streaks"] = match.day_statistic(streak_table)
     summary["streaks"]["n_rotations"] = len(SCREEN_ANGLES)
+    # the screening result is kept for every day: it is the one statistic computed the same
+    # way on all days, so census-level selection uses it (census_summary.py)
+    summary["streaks_screen"] = dict(summary["streaks"])
     if screen_passes(summary["streaks"]):
         streak_table = match_day(prep, CONFIRM_ANGLES)
         summary["streaks"] = match.day_statistic(streak_table)
