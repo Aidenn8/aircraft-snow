@@ -1,6 +1,6 @@
 """Run the event tests for every census radar over a range of analysis days.
 
-usage: census.py START END [--workers N] [--sites config/census_sites.csv] [--force]
+usage: census.py START END [--workers N] [--sites KFTG,KLOT,...] [--force]
 
 For each analysis day D (12 UTC D to 12 UTC D+1) whose ADS-B days D and D+1 are present,
 the continental files are split per radar (snow.adsb_split) and every radar-day is run
@@ -40,25 +40,36 @@ def main():
     ap.add_argument("end")
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--sites", default="", help="comma-separated subset of the census radars")
     a = ap.parse_args()
-    sites = adsb_split.census_sites()
+    all_sites = adsb_split.census_sites()
+    sites = [s for s in a.sites.split(",") if s] or all_sites
+    unknown = set(sites) - set(all_sites)
+    if unknown:
+        raise SystemExit(f"not census radars: {sorted(unknown)}")
     d0, d1 = dt.date.fromisoformat(a.start), dt.date.fromisoformat(a.end)
-    jobs = []
-    d = d0
-    while d <= d1:
-        if adsb.day_path(d).exists() and adsb.day_path(d + dt.timedelta(days=1)).exists():
-            adsb_split.split_day(d, sites)
-            adsb_split.split_day(d + dt.timedelta(days=1), sites)
-            jobs += [(s, d) for s in sites]
-        else:
-            print(f"{d}: no ADS-B yet", flush=True)
-        d += dt.timedelta(days=1)
-    print(f"{len(jobs)} radar-days queued", flush=True)
+    # days are split (in this process) and submitted one at a time, so workers start on the
+    # first days while later ones are still being split
+    n = 0
+    futs = []
     with cf.ProcessPoolExecutor(a.workers) as ex:
-        futs = [ex.submit(one, s, d, a.force) for s, d in jobs]
-        for f in cf.as_completed(futs):
-            print(f.result(), flush=True)
-
+        d = d0
+        while d <= d1:
+            if adsb.day_path(d).exists() and adsb.day_path(d + dt.timedelta(days=1)).exists():
+                # split for every census radar while the continental file is open (cheap,
+                # and later phases can reuse it)
+                adsb_split.split_day(d, all_sites)
+                adsb_split.split_day(d + dt.timedelta(days=1), all_sites)
+                for s in sites:
+                    f = ex.submit(one, s, d, a.force)
+                    f.add_done_callback(lambda f: print(f.result(), flush=True))
+                    futs.append(f)
+                n += len(sites)
+            else:
+                print(f"{d}: no ADS-B yet", flush=True)
+            d += dt.timedelta(days=1)
+        print(f"{n} radar-days queued", flush=True)
+        cf.wait(futs)
 
 if __name__ == "__main__":
     main()

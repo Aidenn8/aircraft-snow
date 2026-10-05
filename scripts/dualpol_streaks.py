@@ -69,10 +69,30 @@ def main():
     for name, g in df.groupby("region"):
         q = g[["REF", "ZDR", "RHO"]].quantile([0.25, 0.5, 0.75]).round(2)
         print(f"{name}: {len(g)} gates\n{q.to_string()}")
-    # same reflectivity range only, to separate the effect of intensity
-    m = (df.REF >= 10) & (df.REF <= 20)
-    print("restricted to 10-20 dBZ:")
-    print(df[m].groupby("region")[["ZDR", "RHO"]].median().round(2))
+    # Gates within a scan are not independent, so the fair comparison is paired by scan: the
+    # streak median against the other-echo median of the same scan, within a reflectivity
+    # range (to separate the effect of intensity), with a sign test and a Wilcoxon test.
+    from scipy import stats
+    rows = []
+    for lo, hi in ((0, 10), (10, 20), (20, 30)):
+        b = df[(df.REF >= lo) & (df.REF < hi)]
+        med = b.groupby(["time", "region"])[["ZDR", "RHO"]].median().unstack("region")
+        for mom in ("ZDR", "RHO"):
+            pair = med[mom].dropna()
+            if len(pair) < 3 or "streak" not in pair:
+                continue
+            diff = pair["streak"] - pair["other echo"]
+            k = int((diff > 0).sum())
+            rows.append({"dbz": f"{lo}-{hi}", "moment": mom, "n_scans": len(diff),
+                         "streak_median": float(pair["streak"].median()),
+                         "other_median": float(pair["other echo"].median()),
+                         "median_diff": float(diff.median()), "streak_higher": k,
+                         "sign_p": float(stats.binomtest(k, len(diff)).pvalue),
+                         "wilcoxon_p": float(stats.wilcoxon(diff).pvalue) if (diff != 0).any() else 1.0})
+    paired = pd.DataFrame(rows)
+    paired.to_csv(ROOT / "data" / "events" / a.site / f"{day}_dualpol_paired.csv", index=False)
+    print("paired by scan (medians of streak and other echo in the same scan):")
+    print(paired.round(3).to_string(index=False))
 
 
 if __name__ == "__main__":
