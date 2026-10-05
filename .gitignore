@@ -8,3 +8,5 @@ tools/thermal/thermalstate
 tools/thermal/state
 tools/thermal/thermal.log
 tools/thermal/pgids/
+review/
+*.egg-info/
