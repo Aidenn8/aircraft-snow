@@ -12,12 +12,13 @@ cases. This project builds an automated detector for these streaks in NEXRAD rad
 matches each streak to the single aircraft that made it using open ADS-B tracks, and
 measures how often chance alone would produce such a match.
 
-On 25 January 2025 at Denver International Airport, the detector finds streaks from 10
-identified jets at a false discovery rate of about 6% (0.6 false matches expected), the
-day's combined evidence exceeding all 200 rotated flight sets (gamma-tail p = 5e-5). The
-matched seeding points imply fall speeds of 0.4-1.7 m/s, as for snow. Of the jets whose
-first passage through the cloud layer could be followed, 36% of those at -17 to -20 C left
-a streak, falling to 15% at -14 to -17 C and 7% at -11 to -14 C (chance: 2-6%).
+On 25 January 2025 at Denver International Airport, the real flights' streak matches beat
+those of every one of 200 copies of the day's flights rotated to other bearings
+(gamma-tail p = 0.0013), while aircraft passing after each scan, which cannot have made its
+echoes, match no better than chance. Sixteen flights matched streaks along their own
+wind-carried tracks at p <= 0.01, against 3.6 expected by chance; their ice implied fall
+speeds of 0.3-1.3 m/s, as for snow. About one jet in eight that crossed the supercooled
+cloud layer into clear air left a radar-visible streak, nine times the chance rate.
 
 ## 1. Background
 
@@ -35,7 +36,7 @@ what temperatures.
 | Source | Use |
 |---|---|
 | adsb.lol open ADS-B history (ODbL), March 2023 onward | aircraft positions every 10-20 s, pressure altitude |
-| NEXRAD Level III N0B (AWS) | lowest-tilt reflectivity, 0.5 deg x 250 m |
+| NEXRAD Level III N0B and N0C (AWS) | lowest-tilt reflectivity (0.5 deg x 250 m) and correlation coefficient |
 | NEXRAD Level II (AWS) | dual-polarisation moments for the case study |
 | HRRR analyses (Utah Zarr archive) | hourly temperature, humidity, wind profiles |
 | tar1090-db | aircraft type and engine class |
@@ -45,8 +46,9 @@ what temperatures.
 
 See `docs/methods.md` for the full description and the lessons from building it. In brief:
 
-1. Streak-shaped echo objects (long, thin, at most 35 dBZ) are found in each radar scan by
-   morphology alone.
+1. Echo that is not precipitation (insects, birds, ground clutter, wind turbines; a
+   correlation coefficient below 0.90) is removed, and streak-shaped echo objects (long,
+   thin, at most 35 dBZ) are found in each radar scan by morphology alone.
 2. Each is compared with every flight that passed 10-50 minutes earlier, its track carried
    by the HRRR wind between the radar beam and the flight's level (with up to 1 m/s of
    allowed wind error). The match must cover the streak and lie along it, and the air must
@@ -73,53 +75,63 @@ carried by the wind to the scan time.*
 
 - **Conditions.** An easterly upslope flow (6-11 kt at the airport, -8 C at the surface)
   under broken to overcast cloud at 3 500-5 000 ft above the airport (mostly 4 600-4 800 ft,
-  about 3.1 km above sea level), light snow on and off. HRRR has a moist layer (83-88% relative humidity) up to about 3.3 km at
-  -18 to -19 C, capped by an inversion that warms to -12 C near 3.9 km; it has no cloud
-  water in it, a known weakness for thin supercooled stratus.
-- **Streaks.** Matched streaks appear from 19:55 to 03:51 UTC (12:55-20:51 local time),
-  11-31 km long and 1.8-3.1 km wide, with peak reflectivity 13.5-25 dBZ, mostly along the
-  downwind, base and final legs of the arrival pattern south-west of the airport.
-- **Aircraft.** 10 flights at p <= 0.005 against 200 rotated flight sets (0.6 false
-  matches expected): CRJ-200 (3), E175, A320, 737-800, 737 MAX 8, 737-900, 787-9 and a
-  Citation Latitude business jet; 9 arrivals and 1 departure. Their seeding points lie at
-  9 100-12 900 ft pressure altitude (2.8-3.9 km), mostly about 3.0 km, near the reported
-  cloud base, at HRRR temperatures of -14.5 to -18 C. The streaks were seen 15-46 minutes
-  after the aircraft passed.
-- **Physical consistency.** The seeding points were 0.7-2.0 km above the radar beam, which
-  over the observed delays implies fall speeds of 0.4-1.7 m/s (median 0.64 m/s): the speeds
-  of snow crystals and aggregates. The drift that best fits each streak is within 1 m/s of
-  the HRRR wind for 9 of 12 streaks; allowing up to 3 m/s improves the fit by a median of
-  only 0.01 in F1.
-- **Life cycle.** Following the matched flights' air through every scan, echo on the
-  drifted track rises to about 12 dB above lines 5-8 km either side at 20-35 minutes, with
-  a width of about 3 km, then weakens and spreads, and is close to background after about
-  an hour. (Between 10 and 50 minutes the composite is shaped by how flights were selected;
-  its width and decay are not.)
+  about 3.1 km above sea level), light snow on and off. HRRR has a moist layer (83-88%
+  relative humidity) up to about 3.3 km at -18 to -19 C, capped by an inversion that warms
+  to -12 C near 3.9 km; it has no cloud water in it, a known weakness for thin supercooled
+  stratus.
+- **The day as a whole.** Of 685 streak-shaped echoes, 65 were matched to a flight. The
+  day's combined evidence (E = 78.7) exceeded that of every one of 200 copies of the day's
+  flights rotated to other bearings (median 34, 95th percentile 53; gamma-tail p = 0.0013).
+  Aircraft passing 10-50 minutes *after* each scan, which cannot have made its echoes,
+  match no better than chance (p = 0.12).
+- **Which aircraft.** At p <= 0.01, 16 flights matched streaks along their own
+  wind-carried tracks, against 3.6 expected by chance: about twelve genuine seeders, with
+  roughly one named match in four possibly chance. Fifteen were jets (CRJ-200 x3, E175 x2,
+  737-800 x2, 737 MAX 8 x2, A321neo x2, 737-900, 787-9, A319, Citation Latitude) and one a
+  Pilatus PC-12 turboprop; 11 were arriving, 4 departing. Nine of the 16 crossed the cloud
+  at 9 700-10 900 ft (about 3.0 km, near the reported cloud base), and 11 at HRRR
+  temperatures of -16 to -18.5 C.
+  Two matches look physically odd and are the likeliest chance ones: an A319 seeding at
+  20 000 ft and -26 C, and an A321neo only 500 m above the radar beam; the PC-12 match, at
+  dawn in widespread snow, is also doubtful on inspection.
+- **Streaks.** The matched streaks (20, from 13:34 to 05:16 UTC) were 9-28 km long and
+  1.4-3.3 km wide (median 2.3 km), peaking at 13.5-29.5 dBZ, and were seen 15-49 minutes
+  after the aircraft passed; most lie along the downwind, base and final legs of the arrival
+  pattern south-west of the airport.
+- **Physical consistency.** The seeding points were 0.5-3.7 km (median 0.9 km) above the
+  radar beam, which over the observed delays implies fall speeds of 0.3-1.3 m/s (median
+  0.55 m/s; 18 of 20 within 0.35-1.0 m/s), the speeds of snow crystals and aggregates.
+  Allowing the wind to be wrong by up to 3 m/s instead of 1 m/s improves the fits by a
+  median of 0.001 in F1.
+- **Life cycle.** Following each matched flight's air through every scan, echo on the
+  drifted track is no higher than beside it before the aircraft passes, rises within
+  minutes, peaks at about 8.5 dB above lines 5-8 km either side 25-35 minutes later, and is
+  back to background after about an hour. (Between 10 and 50 minutes the composite is
+  shaped by how flights were selected; its flat start and its decay are not.)
 
   ![Composite life cycle](figures/denver_lifecycle.png)
 
 - **Particles.** Compared scan by scan with other echo of the same strength, streak echo
-  has a higher correlation coefficient in every scan (11 of 11 at 0-10 and at 10-20 dBZ;
-  medians 0.992 vs 0.982 and 0.993 vs 0.985), i.e. more uniform particles. Its
-  differential reflectivity is lower for weak echo (0-10 dBZ, 11 of 11 scans) but not at
-  10-20 dBZ (higher in 7 of 11). The weak-echo difference may say as much about the noisier
-  background echo as about the streak particles.
-- **How many jets did it.** Of the jets that crossed the seeding layer into echo-free air
-  (first passages), the share whose drifted track carried a streak rose with cold: 36% at
-  -17 to -20 C (31 of 87), 15% at -14 to -17 C (64 of 416) and 7% at -11 to -14 C (4 of
-  61), against 6%, 4% and 2% for the same flights rotated about the radar. The 14
-  turboprops that crossed left none. The warmer bins include flights below the cloud base,
-  so this is an upper bound on how fast efficiency falls with temperature, not a measured
-  threshold.
+  has a higher correlation coefficient (15 of 17 scans at 10-20 dBZ, 10 of 10 at 20-30 dBZ;
+  medians 0.995 against 0.988 and 0.974), i.e. more uniform particles. Its differential
+  reflectivity is lower only for weak echo (0-10 dBZ, 14 of 17 scans), which may say as
+  much about the noisier background echo.
+- **How many jets did it.** Of the jets that entered echo-free air in the seeding layer
+  (8 650-11 800 ft, 21:20-04:40 UTC; first passages), 13.6% left a streak along their
+  drifted track, against 1.5% for the same flights rotated about the radar: about one jet
+  in eight, nine times the chance rate. The share was 15.7% at -17 to -20 C (53 of 338) and
+  11.0% at -14 to -17 C (31 of 282); the difference is within the uncertainty and could come
+  from height above the beam as much as temperature. Ten turboprops crossed; one left a
+  streak.
 
   ![Efficiency by temperature](figures/denver_efficiency.png)
 
-- **How much snow.** With Ze = 110 S^2 (Wolfe & Snider 2012), the streaks averaged 0.2-0.4
-  mm/h of snow (water equivalent), up to 1.7 mm/h in their cores, and each was depositing
-  roughly 5 000-23 000 tonnes of water per hour at its matched scan. That is comparable,
-  over half an hour, to all the liquid water a cloud this thin holds, so either the ice
-  also grew from vapour or the relation overstates snowfall for young, small crystals; the
-  amounts are uncertain by a factor of several.
+- **How much snow.** With Ze = 110 S^2 (Wolfe & Snider 2012), the streaks peaked at
+  0.5-2.9 mm/h of snow (water equivalent), and each was depositing roughly 4 000-38 000
+  tonnes of water per hour at its matched scan (median 15 000). Over half an hour that is
+  comparable to all the liquid water a cloud this thin holds, so either the ice also grew
+  from vapour or the relation overstates snowfall for young, small crystals; the amounts
+  are uncertain by a factor of several.
 - **Ground.** Stations at Denver International, Buckley SFB and Centennial reported light
   snow on and off through the afternoon and evening, so hourly reports cannot separate the
   aircraft's contribution at the surface.
