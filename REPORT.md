@@ -136,10 +136,76 @@ carried by the wind to the scan time.*
   snow on and off through the afternoon and evening, so hourly reports cannot separate the
   aircraft's contribution at the surface.
 
-## 5. Calibration
+## 5. Calibration: what the test can and cannot tell apart
 
-*To be completed from the July null runs, the January runs, the time-reversed diagnostic
-and the injection-recovery tests.*
+![Calibration](figures/calibration.png)
+
+**Recall.** Synthetic streaks were added to the real radar of three quiet Denver days along
+real flights' tracks, with physical timing: a supercooled layer 300-800 m deep at a height
+the flight crossed, ice from each point reaching the radar beam after (its height above the
+beam) / (a fall speed of 0.4-1.2 m/s), invisible for the first 10 minutes, 1.5-3 km wide
+when it appears, and a wind error of 0.7 m/s. Of 426 such streaks, the detector found and
+matched to some flight at p <= 0.05 (event recall) 16% at a peak of 5 dBZ, 52% at 10 dBZ,
+60% at 15 dBZ and 63% at 20 dBZ; to the injected flight itself (attribution) 13%, 45%, 55%
+and 57%. About one recovered streak in nine was credited to another aircraft, typically one
+just ahead on the same path. Most misses are aircraft climbing or descending steeply
+through the layer, whose ice reaches the beam piece by piece: 56% of those were recovered
+against 71% of flights that crossed the layer nearly level, as the Denver seeders did at
+their assigned approach altitudes. Census counts are therefore lower bounds, by a factor of
+about 1.5-2 for streaks of 10-20 dBZ.
+
+**Non-weather echo.** The first version of the test, using reflectivity alone, found
+"aircraft streaks" on warm July days, when no aircraft can make snow (p = 0.005-0.01 on
+three of the first six such radar-days), and one on a November day at Indianapolis. They
+were echo that is not precipitation: ground clutter or turbines at a fixed spot along
+Buffalo's southern arrival path, insects along summer convergence lines at Denver,
+speckled clear-air echo at Indianapolis. The radars' correlation coefficient separates it
+(snow and rain above ~0.97, such echo well below 0.9); masking echo below 0.90 removed
+every one of those false alarms and left the Denver case intact.
+
+**An independent review of the statistics** found that the null was too easy to beat:
+neighbouring rotations are near-copies that match the same streaks, so a rotation scored
+"as if real" was deflated by its own copies while the real flights, with no rotation within
+20 deg, were not. Scoring every set only against sets at least 20 deg away, with a common
+resolution floor, made the day's rank p-value calibrated in simulation (<= 0.05 on 4.0% of
+null days). It also found that injection recovery counted matches to the wrong flight, and
+several smaller bugs, all fixed (docs/methods.md lists them).
+
+**How many independent rotations.** A day has only some 15-25 effectively independent
+rotations. So no single day can be shown significant at the level a census-wide false
+discovery rate needs, and on sparse days (a handful of streaks, rotations matching almost
+nothing) even "beats all 200 rotations" is not rare: on 7 July 2025 at Detroit, four
+arrivals matched one rain line along the final approach. Each day is therefore scored by
+the margin z by which its flights beat their rotations, and its p-value is calibrated
+against the same z of every rotation, pooled over all census days of similar chance-match
+level. On the 80 warm null radar-days (July 2025, eight radars, flights below 13 000 ft in
+air above freezing) this calibrated p-value was <= 0.01 on 1 day (0.8 expected) and <= 0.05
+on 2 (4.0 expected).
+
+**A corridor-preserving null cannot attribute streaks to aircraft.** Replacing the day's
+flights with other days' flights at the same times of day, which fly the same corridors
+through the same weather but cannot have seeded it, removes Denver along with the false
+alarms (p = 0.10): on 7 of its 12 confirmed streaks (at the time), flights from 6-14 of the
+28 other days fitted as well as the real seeder. Airline schedules repeat, so the same
+flight numbers fly the same procedures at the same minutes every day; such a null keeps
+clones of the seeders. Evidence that a streak is aircraft-made therefore rests on the
+rotation test together with timing (echo-free air before the aircraft, echo after),
+physics (supercooled air, snow-like fall speeds) and shape.
+
+**Physical requirements** carry part of the weight: matches must be at or below -4 C, and
+the ice must fall at snow speeds to reach the beam when it did; aircraft snow is light (at
+most 35 dBZ). They removed one physically impossible Denver match (an aircraft at the
+height of the beam itself).
+
+**Time-reversed diagnostic.** Aircraft that pass 10-50 minutes after a scan cannot have
+made its echo; at Denver they match no better than rotations (p = 0.12).
+
+**Inspection.** Each candidate day's matched flights are also classified by fixed rules
+(scripts/inspect_candidates.py): convincing when the streak is isolated (at most 30% of
+the ring 2-8 km around it has echo), persists in two or more scans for the same flight,
+and has a snow-like fall speed from below 16 000 ft; doubtful when it sits in widespread
+echo (over 60% of the ring) or is physically odd. The rules were written with the first
+reviewed days in view and checked against the Denver case; they are an aid, not a test.
 
 ## 6. Census
 
