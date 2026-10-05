@@ -53,9 +53,9 @@ connected in band x hour), compared with the largest cluster of each placebo
 Weakness found: near a busy airport the "side" lines are not empty - they fall on other
 flights' paths and streaks - and the average over all points is diluted by the many
 flights that do not cross cloud. Worse, it is not calibrated on winter days: on eight
-January 2025 Denver days with no visible aircraft streaks (1-8 January), its primary
-statistic reached p <= 0.05 on three (0.025, 0.012, 0.006), where about 0.4 would be
-expected. Real traffic is concentrated on a few corridors, and the change in echo along
+January 2025 Denver days on which the streak test found no evidence of seeding (1-8
+January, day p-values 0.08-0.99), its primary statistic reached p <= 0.05 on three (0.025,
+0.012, 0.006), where 0.4 such days would be expected by chance. Real traffic is concentrated on a few corridors, and the change in echo along
 those corridors is not exchangeable with that along rotated copies on days when
 precipitation is not uniform. It is therefore not used in the census
 (pipeline.run_day(event_test=False)); the code remains for reference.
