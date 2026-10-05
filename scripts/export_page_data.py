@@ -104,13 +104,16 @@ def main():
         for name in ("calibration", "seeders", "by_type", "efficiency"):
             if (cen / f"{name}.csv").exists():
                 out["census"][name] = pd.read_csv(cen / f"{name}.csv").to_dict(orient="records")
-        # false alarms: warm null days scored against the census's fitted null (census_summary.py)
-        fit = cen / "null_fit.json"
-        if fit.exists():
-            nf = json.loads(fit.read_text())
-            if "null_days" in nf:
-                out["census"]["null"] = {"tested": nf["null_days"], "selected": nf["null_selected"],
-                                         "cutoff": nf["p_cutoff"], "fit": nf["fit"]}
+        # how many event days, and the same for warm null days (census_summary.py)
+        sj = cen / "summary.json"
+        if sj.exists():
+            sm = json.loads(sj.read_text())
+            out["census"]["summary"] = sm.get("census", {})
+            if "null" in sm:
+                ns = sm["null"]["event_share"]
+                out["census"]["null"] = {"tested": ns["n_days"], "observed_p01": ns["observed_p01"],
+                                         "expected_p01": ns["expected_p01_null"],
+                                         "selected": sm["null"].get("selected_at_census_cutoff", 0)}
     pathlib.Path(a.out).write_text(json.dumps(_clean(out), separators=(",", ":"), allow_nan=False))
     print(a.out, f"{pathlib.Path(a.out).stat().st_size / 1e3:.0f} kB")
 
