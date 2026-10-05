@@ -135,12 +135,29 @@ and the injection-recovery tests.*
 
 ## 7. Limitations
 
-- Detection is limited to seeding within roughly 1-1.5 km above the lowest radar beam:
-  higher seeding takes longer than the 50-minute matching window to fall into view.
-- HRRR often has no cloud water in thin supercooled stratus; seeding temperatures are HRRR
-  analysis temperatures at the aircraft's pressure level (typical error 1-2 C).
-- In a stream of aircraft on one path, only the first through new cloud can be matched; the
-  census counts seeding flights conservatively.
-- Snowfall rates from reflectivity use one published Ze-S relation and are uncertain by a
-  factor of a few.
-- ADS-B coverage from volunteer receivers changed over 2023-2026.
+- **The chance model can be fooled.** Rotating flights about the radar breaks every link
+  between where aircraft fly and where echo forms, including links that are not seeding
+  (routing around storms, convergence lines near airports). On one warm day this produced
+  a false alarm at p = 0.01. The census's false-alarm rate is measured on warm days at
+  every radar, not assumed.
+- **Corridors cannot be separated from aircraft by any placebo that keeps them.** Other
+  days' flights fly the same procedures at the same minutes, so they fit real aircraft
+  streaks almost as well as the aircraft that made them. Evidence that a streak is
+  aircraft-made therefore rests on the rotation test, the timing (echo-free air before
+  the aircraft, echo after), the physics (temperature, fall speed) and the shapes (turns of
+  an approach pattern that weather does not draw).
+- **Which aircraft.** In a stream on one path, the match is the best-fitting aircraft into
+  echo-free air; an aircraft a few minutes ahead on the same path at the same height could
+  have started the streak instead. Counts of seeding flights are conservative (followers
+  through existing ice are not counted) and individual attributions within a stream are
+  uncertain.
+- **What can be seen.** Only seeding about 0.5-2 km above the lowest radar beam, close
+  enough to fall into it within 10-50 minutes, and at least ~10 km of streak can be
+  detected; aircraft descending steeply through a thin layer leave streaks too short to
+  find. Rates are lower bounds.
+- **Model fields.** HRRR often has no cloud water in thin supercooled stratus, and
+  seeding temperatures are HRRR analysis temperatures at the aircraft's pressure level
+  (typical error 1-2 C).
+- **Snowfall.** Rates from reflectivity use one published Ze-S relation and are uncertain
+  by a factor of a few, more for young, small crystals.
+- **ADS-B coverage** from volunteer receivers changed over 2023-2026.
