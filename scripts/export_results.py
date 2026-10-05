@@ -17,7 +17,7 @@ import pandas as pd
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "results"
-FINAL_INJECTION = ("KFTG_2025-01-01_2025-01-02_2025-01-03_s5.parquet",)
+FINAL_INJECTION = ("KFTG_2025-01-01_2025-01-02_2025-01-03_s7.parquet",)
 
 
 def copy_tables(src: pathlib.Path, dst: pathlib.Path, names):
