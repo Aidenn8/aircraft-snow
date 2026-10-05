@@ -3,18 +3,24 @@
 usage: census_summary.py [--events data/events] [--out data/census] [--q 0.05] [--alpha 0.005]
 
 Day selection. Every tested radar-day has a screening score E (24 rotations) and a
-gamma-tail p-value for it. The gamma tail is an approximation, so it is calibrated
-empirically: on every day, each rotation in turn is treated as the real flight set and
-scored against the other rotations in the same way, giving a null p-value; pooled over all
-tested days these show how often the gamma tail produces a p-value this small by chance.
-A day's calibrated p-value is the share of pooled null p-values at or below its own,
-(1 + count) / (1 + N). Event days are those selected by Benjamini-Hochberg at FDR --q on
-the calibrated p-values.
+gamma-tail p-value for it; days that screen at rank p <= 0.05 or gamma p <= 0.1 are re-run
+with 200 rotations, which refines the same p-value (a sequential Monte Carlo test, Besag &
+Clifford 1991). A day's p-value is the refined one if it was confirmed, else its screening
+one. Event days are selected by Benjamini-Hochberg at FDR --q on these gamma-tail p-values.
 
-This calibration checks the tail approximation, not whether the real flights are
-exchangeable with rotated ones (terrain, beam blockage and traffic corridors could break
-that); null days in summer, where aircraft cannot seed, check that (run this script on
-data/events_null).
+The gamma tail is an approximation, so it is checked empirically: on every day, each
+rotation in turn is treated as the real flight set and scored against the other rotations
+in the same way, giving a null p-value; pooled over days (separately for 24- and
+200-rotation runs) these show how often the gamma tail produces a p-value this small by
+chance (calibration.csv). As a robustness check, each day also gets an empirically
+calibrated p-value, the share of pooled null p-values at or below its own, (1 + count) /
+(1 + N), and a second BH selection on those (column event_cal); it cannot resolve p-values
+below 1/(1 + N).
+
+This checks the tail approximation, not whether the real flights are exchangeable with
+rotated ones (terrain, beam blockage and traffic corridors could break that); null days in
+summer, where aircraft cannot seed, check that (run this script on data/events_null), and
+so do translated placebos (shift_null.py).
 
 Outputs (in --out):
   radar_days.csv    one row per radar-day: screens, tests, reversed diagnostic, p-values
@@ -47,9 +53,11 @@ def screen_stats(s: dict, path: pathlib.Path) -> dict:
     return sk
 
 
-def radar_days(ev_root: pathlib.Path) -> tuple[pd.DataFrame, dict]:
-    rows, nulls = [], {}
+def radar_days(ev_root: pathlib.Path) -> tuple[pd.DataFrame, dict, dict]:
+    rows, nulls24, nulls200 = [], {}, {}
     for path in sorted(ev_root.glob("*/*.json")):
+        if path.name.endswith("_shiftnull.json"):
+            continue
         s = json.loads(path.read_text())
         r = {"site": s["site"], "day": s["day"], "screened_out": s.get("screened_out", "")}
         if not r["screened_out"]:
@@ -57,14 +65,15 @@ def radar_days(ev_root: pathlib.Path) -> tuple[pd.DataFrame, dict]:
             sk = s.get("streaks", {})
             rv = s.get("streaks_reverse", {})
             st = s.get("stats", {})
+            confirmed = sk.get("n_rotations", 0) > len(sc.get("E_null", [])) > 0
             r.update({"n_flights": s.get("n_flights"), "n_scans": s.get("n_scans"),
                       "n_streaks": sk.get("n_streaks"), "n_matched": sk.get("n_matched"),
                       "n_flights_matched": sk.get("n_flights_matched"),
                       "E_screen": sc.get("E"), "p_screen": sc.get("p_day"),
-                      "p_gamma": sc.get("p_day_gamma", np.nan), "R_screen": len(sc.get("E_null", [])),
-                      "recomputed": bool(sc.get("recomputed", False)),
+                      "p_gamma_screen": sc.get("p_day_gamma", np.nan), "R_screen": len(sc.get("E_null", [])),
+                      "recomputed": bool(sc.get("recomputed", False)), "confirmed": confirmed,
                       "E": sk.get("E"), "p_day": sk.get("p_day"), "n_rotations": sk.get("n_rotations"),
-                      "p_day_gamma": sk.get("p_day_gamma", np.nan),
+                      "p_gamma_confirm": sk.get("p_day_gamma", np.nan) if confirmed else np.nan,
                       "p_event": st.get("z", {}).get("p_cluster", np.nan),
                       "p_rev": rv.get("p_day"), "E_rev": rv.get("E"),
                       "cold_moist_hours": len(s.get("cold_moist", {}).get("hours", [])),
@@ -73,9 +82,11 @@ def radar_days(ev_root: pathlib.Path) -> tuple[pd.DataFrame, dict]:
             if 0.005 in fdr:
                 r.update({"n_flights_p005": fdr[0.005]["n_real"], "exp_false_p005": fdr[0.005]["expected_false"]})
             if len(sc.get("E_null", [])):
-                nulls[(s["site"], s["day"])] = np.asarray(sc["E_null"], float)
+                nulls24[(s["site"], s["day"])] = np.asarray(sc["E_null"], float)
+            if confirmed and len(sk.get("E_null", [])):
+                nulls200[(s["site"], s["day"])] = np.asarray(sk["E_null"], float)
         rows.append(r)
-    return pd.DataFrame(rows), nulls
+    return pd.DataFrame(rows), nulls24, nulls200
 
 
 def loo_null_pvalues(E_null: np.ndarray) -> np.ndarray:
@@ -121,36 +132,48 @@ def main():
     a = ap.parse_args()
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    rd, nulls = radar_days(pathlib.Path(a.events))
+    rd, nulls24, nulls200 = radar_days(pathlib.Path(a.events))
     tested = rd[rd.screened_out == ""].copy()
     if tested.empty:
         rd.to_csv(out / "radar_days.csv", index=False)
         print(f"radar-days: {len(rd)}, none tested")
         return
     # days with no streak objects at all: E = 0 for the real set and every rotation
-    tested["p_gamma"] = tested.p_gamma.where(tested.n_streaks.fillna(0) > 0, 1.0)
-    null = np.concatenate([loo_null_pvalues(v) for v in nulls.values()]) if nulls else np.array([])
-    np.save(out / "null_pvalues.npy", null)
-    cal = pd.DataFrame({"level": LEVELS, "null_share": [float(np.mean(null <= L)) if len(null) else np.nan
-                                                        for L in LEVELS], "n_null": len(null)})
+    none = tested.n_streaks.fillna(0) == 0
+    tested.loc[none, "p_gamma_screen"] = 1.0
+    null24 = np.concatenate([loo_null_pvalues(v) for v in nulls24.values()]) if nulls24 else np.array([])
+    null200 = np.concatenate([loo_null_pvalues(v) for v in nulls200.values()]) if nulls200 else np.array([])
+    np.save(out / "null_pvalues.npy", null24)
+    np.save(out / "null_pvalues_200.npy", null200)
+    cal = pd.DataFrame([{"rotations": R, "level": L, "null_share": float(np.mean(nl <= L)) if len(nl) else np.nan,
+                         "n_null": len(nl)} for R, nl in ((24, null24), (200, null200)) for L in LEVELS])
     cal.to_csv(out / "calibration.csv", index=False)
-    tested["p_cal"] = calibrated(tested.p_gamma.to_numpy(float), null) if len(null) else tested.p_gamma
-    tested["event"] = benjamini_hochberg(tested.p_cal.to_numpy(float), a.q)
-    rd = rd.merge(tested[["site", "day", "p_cal", "event"]], on=["site", "day"], how="left")
+    conf = tested.confirmed.fillna(False).astype(bool)
+    tested["p_final"] = np.where(conf, tested.p_gamma_confirm, tested.p_gamma_screen)
+    tested["p_final"] = tested.p_final.fillna(1.0)
+    ones = np.ones(len(tested))
+    cal24 = calibrated(tested.p_gamma_screen.fillna(1.0).to_numpy(float), null24) if len(null24) else ones
+    cal200 = calibrated(tested.p_gamma_confirm.fillna(1.0).to_numpy(float), null200) if len(null200) else cal24
+    tested["p_cal"] = np.where(conf, cal200, cal24)
+    tested["event"] = benjamini_hochberg(tested.p_final.to_numpy(float), a.q)
+    tested["event_cal"] = benjamini_hochberg(tested.p_cal.to_numpy(float), a.q)
+    rd = rd.merge(tested[["site", "day", "p_final", "p_cal", "event", "event_cal"]], on=["site", "day"], how="left")
     rd["event"] = rd.event.fillna(False).astype(bool)
+    rd["event_cal"] = rd.event_cal.fillna(False).astype(bool)
     rd.to_csv(out / "radar_days.csv", index=False)
     ev = tested[tested.event]
     ev.to_csv(out / "event_days.csv", index=False)
     n_rec = int(tested.recomputed.sum())
-    print(f"radar-days: {len(rd)}, screened out {int((rd.screened_out != '').sum())}, tested {len(tested)}"
+    print(f"radar-days: {len(rd)}, screened out {int((rd.screened_out != '').sum())}, tested {len(tested)}, "
+          f"confirmed with 200 rotations {int(conf.sum())}"
           + (f" ({n_rec} with null scores recomputed from saved tables)" if n_rec else ""))
-    print(f"pooled null p-values: {len(null)}; share at or below nominal level:")
-    print(cal.to_string(index=False))
-    print(f"real days: share with screening rank p <= 0.05: {np.mean(tested.p_screen <= 0.05):.3f}; "
-          f"gamma p <= 0.05: {np.mean(tested.p_gamma <= 0.05):.3f}; calibrated p <= 0.05: "
-          f"{np.mean(tested.p_cal <= 0.05):.3f}; reversed rank p <= 0.05: "
+    print("pooled null p-values (rotations scored as real): share at or below nominal level")
+    print(cal.pivot(index="level", columns="rotations", values="null_share").to_string())
+    print(f"real days: screening rank p <= 0.05: {np.mean(tested.p_screen <= 0.05):.3f}; "
+          f"final gamma p <= 0.05: {np.mean(tested.p_final <= 0.05):.3f}; reversed rank p <= 0.05: "
           f"{np.mean(tested.p_rev.dropna() <= 0.05):.3f}")
-    print(f"event days (BH q={a.q} on calibrated p): {len(ev)}")
+    print(f"event days (BH q={a.q}): {len(ev)} on gamma-tail p; {int(tested.event_cal.sum())} on "
+          f"empirically calibrated p")
     rows = []
     for _, d in ev.iterrows():
         path = pathlib.Path(a.events) / d.site / f"{d.day}_streaks.parquet"
