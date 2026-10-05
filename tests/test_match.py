@@ -109,6 +109,19 @@ def test_newness_quiet_and_echo():
     assert q == 0.0                              # echo already present
 
 
+def test_shift_placebos_preserve_orientation_and_exceed_reach():
+    shifts = match.shift_placebos()
+    assert len(shifts) == 24 and all(isinstance(s, tuple) for s in shifts)
+    reach = match.TOL_M + max(match.DRIFT_PERTURB_MS) * match.AGE_MAX_S * np.sqrt(2)
+    assert min(np.hypot(*s) for s in shifts) > reach
+    x = np.array([0.0, 1000.0])
+    y = np.array([0.0, 1000.0])
+    sx, sy = match.placebo_transform(x, y, shifts[1])
+    assert np.allclose(np.diff(sx), np.diff(x)) and np.allclose(np.diff(sy), np.diff(y))
+    rx, ry = match.placebo_transform(x, y, 90.0)
+    assert np.allclose([rx[1], ry[1]], [-1000.0, 1000.0])
+
+
 def test_fall_ok_bounds():
     age = 30 * 60.0
     bw = 200.0

@@ -94,13 +94,32 @@ def skeleton_xy(label_img: np.ndarray, label: int, xs: np.ndarray, ys: np.ndarra
     return xs[ix], ys[iy]
 
 
+def placebo_transform(x, y, rot):
+    """A placebo flight set: rot is a rotation about the radar (degrees) or, as a tuple
+    (dx, dy), a translation in metres (the orientation-preserving robustness check)."""
+    if isinstance(rot, tuple):
+        return x + rot[0], y + rot[1]
+    if rot:
+        a = np.radians(rot)
+        return x * np.cos(a) - y * np.sin(a), x * np.sin(a) + y * np.cos(a)
+    return x, y
+
+
+def shift_placebos(distances_m=(8000.0, 12000.0, 16000.0), n_dir=8):
+    """Translations in n_dir directions at each distance. The smallest distance exceeds the
+    largest displacement a match can absorb (TOL_M + max perturbation x AGE_MAX_S x sqrt 2),
+    so a shifted copy of the true seeder cannot match its own streak."""
+    reach = TOL_M + max(abs(d) for d in DRIFT_PERTURB_MS) * AGE_MAX_S * np.sqrt(2)
+    assert min(distances_m) > reach
+    return tuple((float(d * np.cos(a)), float(d * np.sin(a)))
+                 for d in distances_m for a in np.arange(n_dir) * 2 * np.pi / n_dir)
+
+
 def _candidates(sx, sy, x, y, t, T, drift, flight, rot=0.0, tree=None):
     """Flights explaining the skeleton, best first: list of (F1, flight, du, dv, t_pass,
     u_med, v_med, coverage, precision) for the best drift perturbation of each flight."""
     from scipy.spatial import cKDTree
-    if rot:
-        a = np.radians(rot)
-        x, y = x * np.cos(a) - y * np.sin(a), x * np.sin(a) + y * np.cos(a)
+    x, y = placebo_transform(x, y, rot)
     tree = tree or cKDTree(np.c_[sx, sy])
     n_sk = len(sx)
     age = T - t
