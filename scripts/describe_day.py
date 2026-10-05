@@ -48,6 +48,11 @@ def main():
         z = np.where(np.isnan(G.z[k]), streaks.FLOOR_DBZ, G.z[k])
         obj, lab = streaks.find_streaks(streaks.GridScan(o.t, xs, ys, z, np.isfinite(G.z[k])))
         sx, sy = match.skeleton_xy(lab, int(o.label), xs, ys)
+        # snowfall under the streak at this scan: sum of pixel rates x pixel area, as water
+        # (1 mm over 1 km^2 = 1000 t); below 0 dBZ counts as nothing
+        zpix = G.z[k][lab == int(o.label)]
+        zpix = zpix[np.isfinite(zpix) & (zpix >= 0)]
+        flux_t_h = float(snow_rate(zpix).sum() * (G.res / 1e3) ** 2 * 1000.0)
         mp = match.matched_points(sx, sy, pts, dr, o.t, int(o.flight), o.du, o.dv)
         mp = flights.interp_profile_to_points(mp, prep["profiles"], fields=("temp", "RH", "CLMR"))
         info = ft.loc[int(o.flight)]
@@ -55,7 +60,8 @@ def main():
             "time_utc": pd.Timestamp(o.t, unit="s", tz="UTC"), "x_km": o.x / 1e3, "y_km": o.y / 1e3,
             "length_km": o.length_m / 1e3, "width_km": o.width_m / 1e3, "z_mean": o.z_mean,
             "z_max": o.z_max, "snow_mm_h_mean": float(snow_rate(o.z_mean)),
-            "snow_mm_h_max": float(snow_rate(o.z_max)),
+            "snow_mm_h_max": float(snow_rate(o.z_max)), "snow_flux_t_h": flux_t_h,
+            "area_km2": o.area_km2,
             "f1": o.coverage, "coverage": o["cov"], "precision": o.precision, "p_value": o.p_value,
             "age_min": o.age_s / 60, "quiet_before": o.quiet_before,
             "callsign": info.callsign, "reg": info.reg, "icao_type": info.icao_type,
