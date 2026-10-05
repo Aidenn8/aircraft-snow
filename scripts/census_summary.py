@@ -135,6 +135,15 @@ def main():
     tested["event_theory"] = benjamini_hochberg(tested.p_theory.fillna(1.0).to_numpy(float), a.q)
     cutoff = float(tested.loc[tested.event, "p_emp"].max()) if tested.event.any() else 0.0
     check = {"fit": null, "q": a.q, "p_cutoff": cutoff}
+    # how many event days in all, including those too weak to name one by one: the excess of
+    # days above k null widths over what the fitted null predicts
+    zz = tested.z_screen.to_numpy(float)
+    zz = zz[np.isfinite(zz)]
+    check["excess"] = {}
+    for k in (2.0, 3.0, 4.0):
+        obs = int(np.sum(zz > null["centre"] + k * null["width"]))
+        exp = float(len(zz) * stats.norm.sf(k))
+        check["excess"][f"{k:.0f}"] = {"observed": obs, "expected_null": exp, "excess": obs - exp}
     nroot = pathlib.Path(a.null_events)
     if nroot.exists() and any(nroot.glob("*/*.json")):
         nd = scored(radar_days(nroot))
@@ -167,6 +176,8 @@ def main():
     print(f"empirical null: centre {null['centre']:.2f}, width {null['width']:.2f} (theoretical: 0, 1)")
     print(f"event days (BH q={a.q}): {len(ev)} on the empirical null (p cutoff {cutoff:.2g}); "
           f"{int(tested.event_theory.sum())} on the theoretical gamma-tail p")
+    print("days above k null widths, observed vs expected from the null: " + "; ".join(
+        f"{k}: {v['observed']} vs {v['expected_null']:.1f}" for k, v in check["excess"].items()))
     if "null_days" in check:
         print(f"warm null days: {check['null_days']}; selected by the same cutoff: {check['null_selected']}; "
               f"share with p <= 0.05: {check['null_share_p05']:.3f}, <= 0.01: {check['null_share_p01']:.3f}")
