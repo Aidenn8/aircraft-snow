@@ -410,10 +410,29 @@ def tail_pvalues(E_real: float, E_null: np.ndarray) -> dict:
     return out
 
 
-def day_statistic(table: pd.DataFrame, angles=None) -> dict:
+PLACE_KM = 10.0           # map cells for counting evidence once per place (place_evidence)
+
+
+def place_evidence(P: np.ndarray, F: np.ndarray, x: np.ndarray, y: np.ndarray, col: int,
+                   place_km: float = PLACE_KM) -> float:
+    """E for one set counting places, not flights: the streak objects it matched are binned
+    into place_km map cells (by centroid; the cells depend on the radar only, so they are the
+    same for every set), and each cell contributes -log10 of its best p-value once. Repeated
+    matches at one place in a day (a persistent echo along an approach path matched by
+    successive arrivals, or one leg seeded by aircraft after aircraft) are not independent."""
+    m = F[:, col] != -1
+    if not m.any():
+        return 0.0
+    cell = (np.floor(x[m] / (place_km * 1e3)).astype(np.int64) * 100_003
+            + np.floor(y[m] / (place_km * 1e3)).astype(np.int64))
+    best = pd.Series(P[m, col]).groupby(cell).min().to_numpy()
+    return float(-np.log10(best).sum())
+
+
+def day_statistic(table: pd.DataFrame, angles=None, by_place: bool = False) -> dict:
     """Combine a radar-day's evidence: E = sum over matched flights of -log10 of the
     flight's best streak p-value (a flight matched to the same echo in many scans counts
-    once).
+    once); with by_place, sum over places instead (place_evidence).
 
     Null: under 'no aircraft effect' the real flight set is exchangeable with the rotated
     ones, so each rotation in turn is treated as the real set and scored against the other
@@ -427,7 +446,11 @@ def day_statistic(table: pd.DataFrame, angles=None) -> dict:
     P = pseudo_pvalues(table, angles)             # column 0 real, 1..R rotations as if real
     F = flight_matrix(table)
     R = P.shape[1] - 1
-    E_all = np.array([-np.log10(per_flight_min_p(P, F, j)).sum() for j in range(R + 1)])
+    if by_place:
+        x, y = table.x.to_numpy(float), table.y.to_numpy(float)
+        E_all = np.array([place_evidence(P, F, x, y, j) for j in range(R + 1)])
+    else:
+        E_all = np.array([-np.log10(per_flight_min_p(P, F, j)).sum() for j in range(R + 1)])
     E_real, E_null = float(E_all[0]), E_all[1:]
     return {"E": E_real, "p_day": float((1 + np.sum(E_null >= E_real)) / (1 + R)),
             **tail_pvalues(E_real, E_null),

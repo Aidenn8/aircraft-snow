@@ -42,6 +42,21 @@ def test_event_share_counts_the_excess_of_small_p_values():
     assert (q[-100:] < 0.05).mean() > 0.9 and (q[:900] < 0.05).mean() < 0.01
 
 
+def test_self_calibration_is_uniform_when_the_real_set_is_one_more_rotation():
+    import pandas as pd
+    rng = np.random.default_rng(5)
+    rows = []
+    for i in range(400):
+        # sparse days (mostly zero evidence) and dense days, in the real set and the rotations alike
+        dense = i % 2 == 0
+        draw = (lambda n: rng.gamma(4.0, 6.0, n)) if dense else (lambda n: rng.binomial(3, 0.05, n) * 1.36)
+        rows.append({"_E_all": list(draw(25)), "p_day": 1.0})
+    t = census_summary.self_calibrate(pd.DataFrame(rows))
+    p = t.p_cal.to_numpy()
+    # a discrete null cannot be exactly uniform, but it must not be anti-conservative
+    assert np.mean(p <= 0.05) <= 0.08 and np.mean(p <= 0.2) <= 0.25
+
+
 def test_benjamini_hochberg_known_case():
     # n = 8, q = 0.05: step-up thresholds 0.00625, 0.0125, 0.01875, ... ; only the two
     # smallest p (0.001 <= 0.00625, 0.008 <= 0.0125) pass, and no larger k does

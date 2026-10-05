@@ -15,6 +15,12 @@ score zero, it is fitted to a handful of values and can be far too small. With s
 independent rotations a day, nothing far below ~0.005 can be resolved, and naming single
 days at a census-wide false discovery rate needs more than that across hundreds of days.
 
+Because that rotation p-value is not exact on sparse days (a day where the real flights
+match three or four streaks and the rotations almost none beats "all 200" rotations far
+more often than 1 time in 200, since neighbouring rotations are not independent), the
+false-alarm rate at each level is also measured directly on the warm null days, and the
+census excess is reported against that calibrated rate (summary.json, "calibrated").
+
 So the census answers two questions. (1) How many days had aircraft snow? Under no
 seeding the day p-values are uniform, so the days at or below p = 0.01 (or 0.05) beyond the
 1% (5%) the null predicts are event days: for rare, strong events this excess is the sharp
@@ -58,6 +64,8 @@ def radar_days(ev_root: pathlib.Path) -> pd.DataFrame:
             confirmed = sk.get("n_rotations", 0) > len(sc.get("E_null", [])) > 0
             p_rank = sk.get("p_day", 1.0)
             p_gamma = sk.get("p_day_gamma", np.nan)
+            fin = sk if len(sk.get("E_null", [])) else sc
+            r["_E_all"] = [float(fin.get("E", 0.0))] + [float(e) for e in fin.get("E_null", [])]
             r.update({"n_flights": s.get("n_flights"), "n_scans": s.get("n_scans"),
                       "n_streaks": sk.get("n_streaks", 0), "n_matched": sk.get("n_matched", 0),
                       "n_flights_matched": sk.get("n_flights_matched", 0),
@@ -150,6 +158,82 @@ def probit(p: np.ndarray) -> np.ndarray:
     return np.where(p < 0.99, stats.norm.isf(np.clip(p, 1e-12, 1.0)), np.nan)
 
 
+SD_FLOOR = 0.7            # z uses max(s.d., this): about half one flight's evidence at p = 0.04
+N_STRATA = 3              # days grouped by how many chance matches the rotations make
+
+
+def set_z(E_all: np.ndarray) -> np.ndarray | None:
+    """z of every set (column 0 real, 1..R rotations) against the sets it is comparable with
+    (match.comparable_sets: at least 20 deg away), with the s.d. floored at SD_FLOOR."""
+    from snow import match, pipeline
+    R = len(E_all) - 1
+    if R == len(pipeline.CONFIRM_ANGLES):
+        angles = pipeline.CONFIRM_ANGLES
+    elif R == len(pipeline.SCREEN_ANGLES):
+        angles = pipeline.SCREEN_ANGLES
+    else:
+        return None
+    comp = match.comparable_sets(angles)
+    z = np.empty(R + 1)
+    for j in range(R + 1):
+        ref = E_all[comp[j]]
+        z[j] = (E_all[j] - ref.mean()) / max(ref.std(ddof=1), SD_FLOOR)
+    return z
+
+
+def self_calibrate(t: pd.DataFrame) -> pd.DataFrame:
+    """Calibrated day p-values from the rotations themselves. Every rotation, scored as if it
+    were the real set, has a z like the real one's; under no seeding the real z is just one
+    more of them. The rotations' z values are pooled over all tested days, separately for
+    24- and 200-rotation runs and within strata of the day's chance-match level (median
+    rotation E), and each real day's p-value is the share of its pool at or above its z,
+    (1 + count) / (1 + N). Unlike the rank p-value this keeps the margin by which a day
+    beats its rotations, and unlike the nominal z it is calibrated for sparse days."""
+    t = t.copy()
+    zs, pools = [], {}
+    dens = t["_E_all"].map(lambda e: float(np.median(e[1:])) if len(e) > 1 else 0.0)
+    t["chance_level"] = dens
+    edges = np.quantile(dens[dens > 0], np.linspace(0, 1, N_STRATA + 1)[1:-1]) if (dens > 0).sum() > N_STRATA else []
+    t["stratum"] = np.where(dens <= 0, 0, 1 + np.searchsorted(edges, dens, side="right"))
+    for i, r in t.iterrows():
+        e = np.asarray(r["_E_all"], float)
+        z = set_z(e) if len(e) > 1 else None
+        if z is None:
+            zs.append(np.nan)
+            continue
+        zs.append(z[0])
+        pools.setdefault((len(e) - 1, r["stratum"]), []).append(z[1:])
+    t["z_day"] = zs
+    pools = {k: np.sort(np.concatenate(v)) for k, v in pools.items()}
+    pc, npool = [], []
+    for _, r in t.iterrows():
+        pool = pools.get((len(r["_E_all"]) - 1, r["stratum"]))
+        if pool is None or not np.isfinite(r["z_day"]):
+            pc.append(1.0)
+            npool.append(0)
+            continue
+        k = len(pool) - np.searchsorted(pool, r["z_day"], side="left")      # pool values >= z
+        pc.append((1 + k) / (1 + len(pool)))
+        npool.append(len(pool))
+    t["p_cal"] = pc
+    t["pool_n"] = npool
+    return t
+
+
+def place_p(path: pathlib.Path) -> float:
+    """Sensitivity: the day's rank p-value with evidence counted once per place
+    (match.place_evidence) instead of once per flight, from the saved streak table."""
+    from snow import match, pipeline
+    if not path.exists():
+        return 1.0
+    S = pd.read_parquet(path)
+    if S.empty:
+        return 1.0
+    R = len(S.placebo_cov.iloc[0])
+    angles = pipeline.CONFIRM_ANGLES if R == len(pipeline.CONFIRM_ANGLES) else pipeline.SCREEN_ANGLES
+    return float(match.day_statistic(S, angles, by_place=True)["p_day"])
+
+
 def tested_days(rd: pd.DataFrame) -> pd.DataFrame:
     t = rd[rd.screened_out.fillna("") == ""].copy()
     t["p_day"] = t.p_day.fillna(1.0)
@@ -176,9 +260,12 @@ def main():
     rd = radar_days(pathlib.Path(a.events))
     tested = tested_days(rd)
     if tested.empty:
-        rd.to_csv(out / "radar_days.csv", index=False)
+        rd.drop(columns=["_E_all"], errors="ignore").to_csv(out / "radar_days.csv", index=False)
         print(f"radar-days: {len(rd)}, none tested")
         return
+    tested = self_calibrate(tested)
+    tested["p_rank"] = tested.p_day
+    tested["p_day"] = tested.p_cal                 # the calibrated p-value is the day's p-value
     summ = {"census": summarise(tested, a.q)}
     pi0 = summ["census"]["event_share"]["pi0"]
     tested["q_value"] = q_values(tested.p_day.to_numpy(float), pi0)
@@ -189,12 +276,31 @@ def main():
     if nroot.exists() and any(nroot.glob("*/*.json")):
         nd = tested_days(radar_days(nroot))
         if len(nd):
+            nd = self_calibrate(nd)
+            nd["p_rank"] = nd.p_day
+            nd["p_day"] = nd.p_cal
             summ["null"] = summarise(nd, a.q)
             summ["null"]["selected_at_census_cutoff"] = int((nd.p_day <= cutoff).sum()) if cutoff else 0
-            nd.to_csv(out / "null_days.csv", index=False)
+            nd.drop(columns=["_E_all"]).to_csv(out / "null_days.csv", index=False)
+            # the rotation p-value is not exact on sparse days (few independent rotations), so
+            # the false-alarm rate at each level is taken from the null days themselves, and
+            # the census excess is measured against it (binomial uncertainty on both counts)
+            cal = {}
+            for t, key in ((0.01, "p01"), (0.05, "p05")):
+                k0, n0 = int((nd.p_day <= t).sum()), len(nd)
+                k1, n1 = int((tested.p_day <= t).sum()), len(tested)
+                f0 = (k0 + 0.5) / (n0 + 1)                       # shrunk a little towards 0.5/n
+                lo0, hi0 = stats.beta.ppf([0.05, 0.95], k0 + 0.5, n0 - k0 + 0.5)
+                cal[key] = {"null_rate": f0, "null_rate_90": [float(lo0), float(hi0)], "null_k": k0, "null_n": n0,
+                            "census_k": k1, "census_n": n1, "expected_false": f0 * n1,
+                            "excess": k1 - f0 * n1, "excess_lo": k1 - hi0 * n1, "excess_hi": k1 - lo0 * n1}
+            summ["calibrated"] = cal
     (out / "summary.json").write_text(json.dumps(summ, indent=1, default=float))
-    keep = ["site", "day", "p_day", "q_value", "event"]
-    rd = rd.drop(columns=["p_day"], errors="ignore").merge(tested[keep], on=["site", "day"], how="left")
+    tested["p_place"] = [place_p(pathlib.Path(a.events) / r.site / f"{r.day}_streaks.parquet")
+                         for r in tested.itertuples()]
+    keep = ["site", "day", "p_day", "z_day", "p_rank", "p_place", "chance_level", "stratum", "q_value", "event"]
+    rd = rd.drop(columns=["p_day", "_E_all"], errors="ignore").merge(tested[keep], on=["site", "day"], how="left")
+    tested = tested.drop(columns=["_E_all"])
     rd["event"] = rd.event.fillna(False).astype(bool)
     rd.to_csv(out / "radar_days.csv", index=False)
     ev = tested[tested.event]
@@ -220,8 +326,13 @@ def main():
               f"<= 0.05: {ns['observed_p05']} (null {ns['expected_p05_null']:.1f}); excess at 0.01 "
               f"{ns['excess_p01']:.1f}; BH selected "
               f"{summ['null']['bh_selected']}; at the census cutoff {summ['null']['selected_at_census_cutoff']}")
+    if "calibrated" in summ:
+        for key, c in summ["calibrated"].items():
+            print(f"calibrated by null days at {key}: null rate {c['null_rate']:.3f} ({c['null_k']}/{c['null_n']}; 90% "
+                  f"{c['null_rate_90'][0]:.3f}-{c['null_rate_90'][1]:.3f}); census {c['census_k']}/{c['census_n']}, "
+                  f"expected false {c['expected_false']:.1f}, excess {c['excess']:.1f} ({c['excess_lo']:.1f} to {c['excess_hi']:.1f})")
     print("top candidates:")
-    print(cand[["site", "day", "n_streaks", "n_flights_matched", "E", "p_day", "q_value", "p_rev"]]
+    print(cand[["site", "day", "n_streaks", "n_flights_matched", "E", "z_day", "p_rank", "p_day", "q_value", "p_rev"]]
           .head(10).to_string(index=False))
     rows = []
     for _, d in ev.iterrows():
