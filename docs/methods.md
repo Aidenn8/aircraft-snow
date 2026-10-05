@@ -155,7 +155,19 @@ rotation of 200 reached it (rank p < 0.005, gamma tail p = 2e-4). At p <= 0.005,
   5/31 at 5 dBZ peak (16%), 35/37 at 10 dBZ (95%), 22/26 at 15 dBZ (85%), 22/26 at 20 dBZ
   (85%).
 - False alarms: the same pipeline on July days restricted to tracks below 13 000 ft, where
-  the air is above freezing and aircraft cannot seed (null mode).
+  the air is above freezing and aircraft cannot seed (null mode; only points the HRRR puts
+  above 0 C are used).
+- The rotation null fails on at least one warm day. On 1 July 2025 at Denver, with no
+  seeding possible, the real flights matched streak-like echo better than all 200 rotated
+  copies before the physical requirements were added (p = 0.005; 2 035 objects, 7 flights at
+  p <= 0.005 against 1.6 expected), and better than all but one after them (p = 0.010;
+  1 452 objects with peak <= 35 dBZ, 7 flights at p <= 0.005 against 0.9 expected; gamma-tail
+  p = 0.006). The matched objects were edges of convective echo 20-35 km south-west of the
+  radar, along the southern arrival corridor, matched by low flights (implied fall speeds
+  0.12-0.6 m/s). Rotation breaks every link between where aircraft fly and where echo
+  forms, and not all such links are seeding: aircraft are routed around storms, and
+  terrain-forced convergence lines (the Denver Convergence-Vorticity Zone, for one) form near
+  the airport. A null that keeps those links is needed; the day-swap test (below) is one.
 
 ## Lessons from development
 
