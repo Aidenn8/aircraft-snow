@@ -54,6 +54,31 @@ def load_scans(site: str, t_a: dt.datetime, t_b: dt.datetime):
     return scans
 
 
+def track_points(pos: pd.DataFrame, profs: pd.DataFrame, sw0, alt_max_ft: float | None = None):
+    """Track points that can be candidates (altitude band, range, not far below the beam),
+    with their drift, height above the beam, beam half-width and HRRR temperature, and the
+    same interpolated to 250 m spacing (each interpolated point inherits the drift of the
+    reported position it starts from)."""
+    hi = ALT_RANGE_FT[1] if alt_max_ft is None else min(alt_max_ft, ALT_RANGE_FT[1])
+    pts = pos[(pos.alt_ft >= ALT_RANGE_FT[0]) & (pos.alt_ft < hi)].copy()
+    rng = np.hypot(pts.x, pts.y).to_numpy()
+    h_beam, _ = beam_height_ground_range(rng, sw0.elevation, sw0.radar_height)
+    # pressure altitude ~ altitude above sea level to within a few hundred feet (a loose
+    # preselection; the fall-speed test in match.py uses geometric height)
+    alt_m = pts.alt_ft.to_numpy() * 0.3048
+    keep = (h_beam <= alt_m + BEAM_MARGIN_M) & (rng >= MIN_RANGE_M) & (rng <= MAX_RANGE_M)
+    pts = pts[keep].reset_index(drop=True)
+    drift = epoch.drift_velocity(pts, profs, sw0.radar_height, sw0.elevation)
+    # height above the beam and beam half-width, for the fall-speed test in match.py
+    pts["dh"], pts["bw"] = epoch.height_above_beam(pts, profs, sw0.radar_height, sw0.elevation,
+                                                   match.BEAM_HALF_WIDTH_DEG)
+    # HRRR temperature at each point (time- and log-pressure-interpolated)
+    pts["temp_c"] = flights.interp_profile_to_points(pts, profs, fields=("temp",))["temp"].to_numpy()
+    dense = flights.densify(pts, columns=("x", "y", "t", "alt_ft", "p_hpa", "gs", "dh", "bw", "temp_c"))
+    drift_dense = drift[dense.src.to_numpy()]
+    return pts, drift, dense, drift_dense
+
+
 def prepare(site: str, day: dt.date, scans=None, alt_max_ft: float | None = None):
     """Everything the event test needs: grids, points with drift, the radar sweep header."""
     t0, t1 = day_window(day)
@@ -65,30 +90,13 @@ def prepare(site: str, day: dt.date, scans=None, alt_max_ft: float | None = None
     lat0, lon0 = sw0.radar_lat, sw0.radar_lon
     pos = flights.segment(flights.load_window(lat0, lon0, MAX_RANGE_M / 1000 + 5,
                                               t0 - dt.timedelta(minutes=5), t1, site=site))
-    hi = ALT_RANGE_FT[1] if alt_max_ft is None else min(alt_max_ft, ALT_RANGE_FT[1])
-    pts = pos[(pos.alt_ft >= ALT_RANGE_FT[0]) & (pos.alt_ft < hi)].copy()
-    rng = np.hypot(pts.x, pts.y).to_numpy()
-    h_beam, _ = beam_height_ground_range(rng, sw0.elevation, sw0.radar_height)
-    # pressure altitude ~ altitude above sea level to within a few hundred feet
-    alt_m = pts.alt_ft.to_numpy() * 0.3048
-    keep = (h_beam <= alt_m + BEAM_MARGIN_M) & (rng >= MIN_RANGE_M) & (rng <= MAX_RANGE_M)
-    pts = pts[keep].reset_index(drop=True)
     runs = [t0.replace(tzinfo=None) + dt.timedelta(hours=k) for k in range(-1, 26)]
     profs = pd.concat([hrrr.profile(r, lat0, lon0, box=HRRR_BOX) for r in runs], ignore_index=True)
-    drift = epoch.drift_velocity(pts, profs, sw0.radar_height, sw0.elevation)
-    # height above the beam and beam half-width, for the fall-speed test in match.py
-    pts["dh"], pts["bw"] = epoch.height_above_beam(pts, profs, sw0.radar_height, sw0.elevation,
-                                                   match.BEAM_HALF_WIDTH_DEG)
-    # HRRR temperature at each point (time- and log-pressure-interpolated)
-    pts["temp_c"] = flights.interp_profile_to_points(pts, profs, fields=("temp",))["temp"].to_numpy()
+    pts, drift, dense, drift_dense = track_points(pos, profs, sw0, alt_max_ft)
     # every aircraft at any altitude (including ones on the ground) is masked out of the radar
     allpos = flights.load_window(lat0, lon0, MAX_RANGE_M / 1000 + 15, t0 - dt.timedelta(hours=1),
                                  t1 + dt.timedelta(hours=1.5), max_alt_ft=60_000, site=site)
     grids = event.Grids.from_sweeps(scans, aircraft=allpos[["hex", "t", "x", "y", "gs"]])
-    # tracks interpolated to 250 m spacing for streak matching; each interpolated point
-    # inherits the drift of the reported position it starts from
-    dense = flights.densify(pts, columns=("x", "y", "t", "alt_ft", "p_hpa", "gs", "dh", "bw", "temp_c"))
-    drift_dense = drift[dense.src.to_numpy()]
     return {"grids": grids, "points": pts, "drift": drift, "profiles": profs, "sweep0": sw0,
             "positions": pos, "t0": t0, "points_dense": dense, "drift_dense": drift_dense}
 
@@ -133,14 +141,47 @@ def streak_objects_day(prep: dict):
     return kept, persist, xs, ys
 
 
+def _fast_only(pts: pd.DataFrame, dr: np.ndarray):
+    gs = pts.gs.to_numpy()
+    fast = ~((gs >= 0) & (gs < MIN_MATCH_GS_KT * 10))
+    return pts[fast].reset_index(drop=True), dr[fast]
+
+
 def matching_points(prep: dict):
     """Interpolated track points used for streak matching, and their drift. Slow points
     (helicopters, hovering, slow general aviation: < MIN_MATCH_GS_KT) are excluded: their
     tracks loop over small areas, so their drifted "lines" are blobs that fit any echo."""
-    pts, dr = prep["points_dense"], prep["drift_dense"]
-    gs = pts.gs.to_numpy()
-    fast = ~((gs >= 0) & (gs < MIN_MATCH_GS_KT * 10))
-    return pts[fast].reset_index(drop=True), dr[fast]
+    return _fast_only(prep["points_dense"], prep["drift_dense"])
+
+
+DAYSWAP_OFFSETS = tuple(k for k in range(-14, 15) if k != 0)
+
+
+def dayswap_sets(prep: dict, site: str, day: dt.date, offsets=DAYSWAP_OFFSETS,
+                 alt_max_ft: float | None = None):
+    """Placebo flight sets from other days: the flights of day + k (same hours), moved in time
+    by -k days onto this day, and prepared exactly like the real flights with this day's HRRR
+    (drift, height above the beam, temperature). They fly the same corridors and runway
+    patterns through the same weather but cannot have seeded this day's cloud. Days without
+    ADS-B are skipped. Returns a list of (points, drift) and the offsets used."""
+    t0, t1 = day_window(day)
+    sw0, profs = prep["sweep0"], prep["profiles"]
+    sets, used = [], []
+    for k in offsets:
+        d = day + dt.timedelta(days=k)
+        if not (adsb.day_path(d).exists() and adsb.day_path(d + dt.timedelta(days=1)).exists()):
+            continue
+        shift = dt.timedelta(days=k)
+        pos = flights.load_window(sw0.radar_lat, sw0.radar_lon, MAX_RANGE_M / 1000 + 5,
+                                  t0 + shift - dt.timedelta(minutes=5), t1 + shift, site=site)
+        pos = flights.segment(pos)
+        pos["t"] = pos.t - k * 86400
+        _, _, dense, drift_dense = track_points(pos, profs, sw0, alt_max_ft)
+        p, d_ = _fast_only(dense, drift_dense)
+        p["flight"] = p.flight + (1000 + k) * 1_000_000        # distinct from real flight ids
+        sets.append((p, d_))
+        used.append(k)
+    return sets, used
 
 
 def screen_passes(day_stat: dict) -> bool:
@@ -150,15 +191,16 @@ def screen_passes(day_stat: dict) -> bool:
 
 
 def match_day(prep: dict, angles=SCREEN_ANGLES, reverse: bool = False,
-              max_temp_c=match.T_SEED_MAX_C) -> pd.DataFrame:
+              max_temp_c=match.T_SEED_MAX_C, placebo_sets=None) -> pd.DataFrame:
     """Streak objects in every scan of the day (fixed echoes removed), each matched to its
     best new flight with rotation placebos (reverse=True: the time-reversed diagnostic;
-    max_temp_c=None: no temperature requirement, for null-mode days)."""
+    max_temp_c=None: null mode, warm points only; placebo_sets: other flight sets instead of
+    rotations, see dayswap_sets)."""
     G = prep["grids"]
     pts, dr = matching_points(prep)
     kept, _, xs, ys = streak_objects_day(prep)
     rows = [match.match_streaks(G, G.t[k], lab, obj, xs, ys, pts, dr, angles=angles, reverse=reverse,
-                                max_temp_c=max_temp_c)
+                                max_temp_c=max_temp_c, placebo_sets=placebo_sets)
             for k, obj, lab in kept]
     rows = [r for r in rows if not r.empty]
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()

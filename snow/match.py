@@ -233,20 +233,31 @@ def matched_points(sx, sy, points: pd.DataFrame, drift: np.ndarray, T: float, fl
     return p[np.isfinite(d)]
 
 
-def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
-                  points: pd.DataFrame, drift: np.ndarray, angles=PLACEBO_ANGLES,
-                  reverse: bool = False, max_temp_c=T_SEED_MAX_C) -> pd.DataFrame:
-    """For every streak object: the best real flight that passes the newness test, its F1
-    score (column `coverage` for compatibility, plus `cov` and `precision`), and the
-    rotation p-value of that score. reverse=True runs the time-reversed diagnostic: aircraft
-    passing 10-50 min after the scan, no newness test."""
-    from scipy.spatial import cKDTree
+def _candidate_arrays(points: pd.DataFrame, drift: np.ndarray, T: float, reverse: bool, max_temp_c):
+    """(x, y, t, drift, flight) of the points that are candidates at scan time T."""
     age_all = T - points.t.to_numpy(float)
     a0, a1 = age_window(reverse)
     m = ((age_all >= a0) & (age_all <= a1) & np.isfinite(drift[:, 0])
          & _physical_mask(points, age_all, max_temp_c))
-    x, y = points.x.to_numpy()[m], points.y.to_numpy()[m]
-    t, dr, fl = points.t.to_numpy(float)[m], drift[m], points.flight.to_numpy()[m]
+    return (points.x.to_numpy()[m], points.y.to_numpy()[m], points.t.to_numpy(float)[m], drift[m],
+            points.flight.to_numpy()[m])
+
+
+def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
+                  points: pd.DataFrame, drift: np.ndarray, angles=PLACEBO_ANGLES,
+                  reverse: bool = False, max_temp_c=T_SEED_MAX_C, placebo_sets=None) -> pd.DataFrame:
+    """For every streak object: the best real flight that passes the newness test, its F1
+    score (column `coverage` for compatibility, plus `cov` and `precision`), and the
+    placebo p-value of that score. reverse=True runs the time-reversed diagnostic: aircraft
+    passing 10-50 min after the scan, no newness test.
+
+    Placebos are the real flights rotated (or translated) by each entry of `angles`, unless
+    `placebo_sets` is given: a list of (points, drift) pairs, other flight sets (for example
+    other days' flights at the same time of day) matched exactly like the real one."""
+    from scipy.spatial import cKDTree
+    x, y, t, dr, fl = _candidate_arrays(points, drift, T, reverse, max_temp_c)
+    sets = ([_candidate_arrays(p, d, T, reverse, max_temp_c) for p, d in placebo_sets]
+            if placebo_sets is not None else None)
     rows = []
     for _, o in objects.iterrows():
         sx, sy = skeleton_xy(label_img, o.label, xs, ys)
@@ -255,8 +266,12 @@ def match_streaks(grids, T: float, label_img, objects: pd.DataFrame, xs, ys,
         tree = cKDTree(np.c_[sx, sy])
         f1, f, du, dv, t_pass, q, cov, prec = best_new_match(grids, sx, sy, x, y, t, T, dr, fl, tree=tree,
                                                              require_new=not reverse)
-        pm = [best_new_match(grids, sx, sy, x, y, t, T, dr, fl, rot=r, tree=tree, require_new=not reverse)
-              for r in angles]
+        if sets is None:
+            pm = [best_new_match(grids, sx, sy, x, y, t, T, dr, fl, rot=r, tree=tree, require_new=not reverse)
+                  for r in angles]
+        else:
+            pm = [best_new_match(grids, sx, sy, *c[:3], T, c[3], c[4], tree=tree, require_new=not reverse)
+                  if len(c[0]) else (0.0, -1) for c in sets]
         plac = np.array([m_[0] for m_ in pm])
         plac_flight = np.array([m_[1] for m_ in pm], np.int64)
         alt_med, p_med, n_seed, v_fall = np.nan, np.nan, 0, np.nan
