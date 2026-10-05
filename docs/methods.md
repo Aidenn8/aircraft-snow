@@ -230,6 +230,13 @@ reflectivity scan (Level III N0B) is now paired with the same scan's correlation
 coefficient (N0C), and echo below 0.90 counts as no echo, before streak detection and the
 newness test. The Denver streaks measured 0.992-0.995.
 
+On the three warm null days that had come out significant, the mask removed most streak
+objects and every false alarm: Denver 1 452 -> 60 objects, p = 0.010 -> 0.72; Buffalo 455 ->
+73, p = 0.005 -> 0.76; Cleveland 729 -> 249, p = 0.010 -> 0.60. What had looked like edges
+of convective echo near Denver was mostly clear-air echo: summer boundary layers are full of
+insects, which radars see along convergence lines as thin bright lines with a low
+correlation coefficient.
+
 ## Lessons from development
 
 - A global average over all flights and all of the radar domain dilutes the signal to the
