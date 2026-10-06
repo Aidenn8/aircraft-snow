@@ -136,6 +136,70 @@ same way, 1 day had a calibrated p <= 0.01 (0.8 expected) and 2 had p <= 0.05 (4
 expected): the false-alarm rate is as stated. (The uncalibrated rank p-value gave 1 and 3 on
 the same days: roughly honest overall, but unable to tell a sparse day from Denver.)
 
+## Bands, supercooled cloud and the catalogue (census stage)
+
+The orientation confound is real. Runways are chosen by the wind and snow bands line up
+with it, so on a banded day the arrival and departure corridors run along the bands while
+rotated copies of the tracks cut across them, and pieces of bands match the real flights
+more often than the rotations. Reviewing the 2024-25 candidates by eye found the clearest
+case at Pittsburgh on 4 January 2025 (parallel east-west bands, matched along east-west
+arrival paths; calibrated p 0.0095). Two checks were built and compared on the days judged
+by eye.
+
+- Translated tracks (scripts/shift_null.py): every flight moved 8-16 km in 8 directions
+  keeps its orientation. At Pittsburgh the translated sets matched far more than rotated
+  ones (null median E 32.7 against 19.8) and the real flights no longer stood out (rank
+  p 0.32). But translation has its own failure: a track moved sideways by 8-16 km lands on
+  the parallel lanes of the same traffic (downwind legs beside final approaches, parallel
+  arrival streams), which carry real streaks from other aircraft. Translated sets matched
+  more than rotations on every day, the clean ones included, and a visually clear case
+  (Minneapolis, 19 December 2024) failed. Rotation errs lenient on banded days and
+  translation strict on busy ones; it agreed with the visual call on 8 of 10 days.
+- Band filter (scripts/band_check.py; census_summary.py --band-max). For each streak
+  object, the number of other objects in the same scan within 15 degrees of its
+  orientation and 60 km of it (streaks.parallel_counts). That depends on the radar echo
+  alone, so dropping objects with 3 or more parallel neighbours from the real and the
+  rotated sets alike leaves the test valid. On the judged days it took Pittsburgh's z from
+  3.10 to 1.23 (rank p 0.025 to 0.085) and left every visually convincing day significant
+  (Denver 25 January z 3.98 to 4.11, Minneapolis 15 February unchanged, Detroit 1 January
+  3.00 to 2.38 the largest drop). It did not change Denver 26 November 2024, whose broad
+  bands are too wide to be streak objects; that day stays ambiguous by eye. Since the
+  objects' orientation and parallel count are now saved with every match table
+  (pipeline.streak_objects_day; scripts/backfill_parallel.py for tables saved earlier),
+  the whole census is also re-scored with the filter and reported alongside.
+
+Supercooled cloud (scripts/slw_covariate.py). Aircraft make ice only in cloud of
+supercooled droplets. For every radar-day: the hours (of 24) in which the HRRR analysis over
+the radar (5 x 5 points) has cloud water >= 0.01 g/kg at some level of 2 000-24 000 ft
+at -4 C or colder. Artefacts of the method have no reason to follow it; real seeding must.
+It is a coarse proxy (one column for a domain 130 km across), used to stratify the census,
+not to select days.
+
+Visual review and the catalogue. For each candidate day (lowest calibrated p first) a review
+sheet (scripts/review_day.py) shows the eight best matches: reflectivity around the streak,
+the flight's track and its drifted track. Each day is recorded in
+results/census/visual_review.csv as convincing (thin streaks in otherwise clear or light
+echo lying along drifted tracks, growing over scans), ambiguous, or doubtful (matches are
+pieces of bands, cells or widespread echo), with a note. Objective per-flight measures from
+scripts/inspect_candidates.py are recorded beside it: isolation (share of a 2-8 km ring
+around the streak with echo >= 5 dBZ), scans matched, parallel neighbours, implied fall
+speed and seeding altitude; a flight is 'doubtful' if isolation > 0.6, 3 or more parallel
+neighbours, fall speed outside 0.25-1.6 m/s, or seeding at or above 16 000 ft. The
+catalogue is every flight with a best streak match at p <= 0.01 that is not doubtful, on
+days judged convincing. It is curated, not a statistical selection; the rotations' expected
+number of false matches on those days is reported beside it.
+
+Seeding efficiency on catalogue days (scripts/seeding_efficiency.py, census_analysis.py).
+For each flight crossing the day's seeding layer through air with no echo before it (first
+passage): did a streak lie along its drifted track 10-50 min later (best F1 >= 0.5)? The
+chance level is the same question for its track rotated by 60-300 degrees. Comparing
+arrivals and departures needs care: arrivals descend gently and fly level segments, so they
+spend about twice as long in a layer (median 184 against 88 track points) and a longer
+seeded line is likelier to become a detectable streak. The comparison is therefore a
+Mantel-Haenszel odds ratio stratified by quintile of in-layer track points, temperature
+bin and day. What remains mixes aircraft configuration (gear and flaps out, high lift) with
+airspeed (slower flight seeds more air per km of track) and does not separate them.
+
 Denver, 25-26 January 2025 (analysis day from 12 UTC, final method with the echo mask,
 exclusion zone and floored p-values): 685 streak objects, 65 matched to a flight; E = 78.7
 against a null median of 34; no rotation of 200 reached it (rank p = 1/201, gamma tail
