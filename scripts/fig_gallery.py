@@ -140,7 +140,8 @@ def main():
                           label="where the aircraft flew, carried by the wind to the scan time"),
                plt.Line2D([], [], color=figstyle.INK_2, lw=0.9, ls=(0, (3, 2)),
                           label="the aircraft's track, previous hour")]
-    fig.legend(handles=handles, loc="outside lower center", ncol=2)
+    fig.legend(handles=handles, loc="outside upper center", ncol=2)
+    fig.get_layout_engine().set(h_pad=0.12, hspace=0.04)
     if a.title:
         fig.suptitle(a.title, x=0.02, ha="left", fontsize=13, fontweight="semibold", color=figstyle.INK)
     out = pathlib.Path(a.out)
