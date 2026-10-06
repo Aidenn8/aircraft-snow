@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage
 
-from snow import match, pipeline, streaks
+from snow import flights, match, pipeline, streaks
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RING_M = (2000.0, 8000.0)
@@ -87,6 +87,8 @@ def inspect_day(site: str, day: dt.date, ev: pathlib.Path, alpha: float) -> list
         return []
     prep = pipeline.prepare(site, day)
     G = prep["grids"]
+    calls = pd.concat([flights.load_calls(day, site), flights.load_calls(day + dt.timedelta(days=1), site)])
+    ft = flights.flight_table(prep["positions"], calls)
     kept, _, xs, ys = pipeline.streak_objects_day(prep)
     labs = {float(G.t[k]): (k, lab, obj) for k, obj, lab in kept}
     res = G.res
@@ -100,7 +102,11 @@ def inspect_day(site: str, day: dt.date, ev: pathlib.Path, alpha: float) -> list
         z = G.z[k]
         valid = ring & np.isfinite(z)
         iso = float(np.mean(z[valid] >= ECHO_DBZ)) if valid.any() else np.nan
-        rows.append({"site": site, "day": str(day), "flight": int(f), "t": o.t, "p_value": o.p_value,
+        info = ft.loc[f] if f in ft.index else None
+        rows.append({"site": site, "day": str(day), "flight": int(f),
+                     "callsign": info.callsign if info is not None else "",
+                     "icao_type": info.icao_type if info is not None else "",
+                     "t": o.t, "p_value": o.p_value,
                      "f1": o.coverage, "isolation": iso, "n_scans": int(g.t.nunique()),
                      "parallel": parallel_neighbours(lab, objs, int(o.label), res),
                      "v_fall": float(o.v_fall) if "v_fall" in o and np.isfinite(o.v_fall) else np.nan,
