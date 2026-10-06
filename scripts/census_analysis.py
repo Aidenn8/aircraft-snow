@@ -117,6 +117,68 @@ def catalogue(cen: pathlib.Path, evr: pathlib.Path, review: pathlib.Path, alpha:
     return S, false, missing
 
 
+def wilson(k: np.ndarray, n: np.ndarray, z: float = 1.645) -> tuple[np.ndarray, np.ndarray]:
+    """Wilson score interval (90% by default) for k successes in n trials."""
+    k, n = np.asarray(k, float), np.asarray(n, float)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ph = k / n
+        c = (ph + z * z / (2 * n)) / (1 + z * z / n)
+        h = z * np.sqrt(ph * (1 - ph) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return c - h, c + h
+
+
+def rate_table(E: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    g = (E.groupby(keys, observed=True)
+         .agg(n=("flight", "size"), k=("made_streak", "sum"), chance=("placebo_rate", "mean")).reset_index())
+    g["made_streak"] = g.k / g.n
+    g["lo90"], g["hi90"] = wilson(g.k, g.n)
+    g["excess"] = (g.made_streak - g.chance) / (1 - g.chance)
+    return g
+
+
+def mantel_haenszel(df: pd.DataFrame, exposed: str, outcome: str, strata: list[str], z: float = 1.645) -> dict:
+    """Mantel-Haenszel common odds ratio of outcome for exposed vs not, over strata, with the
+    Robins-Breslow-Greenland interval (90% by default)."""
+    R = S = PR = PSQR = QS = 0.0
+    for _, g in df.groupby(strata, observed=True):
+        e, y = g[exposed].astype(bool), g[outcome].astype(bool)
+        a, b = float((e & y).sum()), float((e & ~y).sum())
+        c, d = float((~e & y).sum()), float((~e & ~y).sum())
+        n = a + b + c + d
+        if n == 0 or (a + b) == 0 or (c + d) == 0:
+            continue
+        r, s_, P, Q = a * d / n, b * c / n, (a + d) / n, (b + c) / n
+        R, S = R + r, S + s_
+        PR, PSQR, QS = PR + P * r, PSQR + P * s_ + Q * r, QS + Q * s_
+    if R == 0 or S == 0:
+        return {"or": np.nan, "lo": np.nan, "hi": np.nan}
+    var = PR / (2 * R * R) + PSQR / (2 * R * S) + QS / (2 * S * S)
+    lor = np.log(R / S)
+    return {"or": float(np.exp(lor)), "lo": float(np.exp(lor - z * np.sqrt(var))),
+            "hi": float(np.exp(lor + z * np.sqrt(var)))}
+
+
+def phase_effect(E: pd.DataFrame) -> pd.DataFrame:
+    """Jet arrivals against departures. Arrivals spend much longer in a layer (shallow descent,
+    level segments) and a longer seeded line is likelier to make a detectable streak, so the
+    comparison is stratified by the number of track points in the layer (quintiles) and by
+    temperature. What remains mixes configuration (gear and flaps out) with airspeed (slower
+    flight seeds more air per km); it does not separate them."""
+    J = E[(E.engine_class == "jet") & E.phase.isin(["arrival", "departure"])].copy()
+    if J.empty:
+        return pd.DataFrame()
+    J["path_q"] = pd.qcut(J.n_points, 5, duplicates="drop").astype(str)
+    J["arrival"] = J.phase == "arrival"
+    rows = [{"comparison": "crude", **mantel_haenszel(J.assign(_s=0), "arrival", "made_streak", ["_s"])},
+            {"comparison": "by path length", **mantel_haenszel(J, "arrival", "made_streak", ["path_q"])},
+            {"comparison": "by path length and temperature",
+             **mantel_haenszel(J, "arrival", "made_streak", ["path_q", "tbin"])},
+            # flights on one day share its clouds: compare arrivals with departures of the same day
+            {"comparison": "by path length, temperature and day",
+             **mantel_haenszel(J, "arrival", "made_streak", ["path_q", "tbin", "site", "day"])}]
+    return pd.DataFrame(rows)
+
+
 def efficiency(evr: pathlib.Path, days: pd.DataFrame):
     expo = []
     for d in days.itertuples():
@@ -124,22 +186,23 @@ def efficiency(evr: pathlib.Path, days: pd.DataFrame):
         if q.exists():
             expo.append(pd.read_csv(q).assign(site=d.site, day=d.day))
     if not expo:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
     E = pd.concat(expo, ignore_index=True)
     E = E[E.first_passage.astype(bool)].copy()
-    E["tbin"] = pd.cut(E.temp_c, TEMP_BINS)
-    eff = (E.groupby(["engine_class", "tbin"], observed=True)
-           .agg(n=("flight", "size"), made_streak=("made_streak", "mean"), chance=("placebo_rate", "mean"))
-           .reset_index())
-    allc = (E.groupby("engine_class").agg(n=("flight", "size"), made_streak=("made_streak", "mean"),
-                                          chance=("placebo_rate", "mean")).reset_index().assign(tbin="all"))
-    eff = pd.concat([eff, allc], ignore_index=True)
-    eff["excess"] = (eff.made_streak - eff.chance) / (1 - eff.chance)
+    E["tbin"] = pd.cut(E.temp_c, TEMP_BINS).astype(str)
+    E["made_streak"] = E.made_streak.astype(bool)
+    # by engine class and temperature, and (jets, which have the numbers) by flight phase:
+    # gear and flaps out at low speed on approach cool the air over the wing most
+    eff = pd.concat([rate_table(E, ["engine_class", "tbin"]).assign(phase="all"),
+                     rate_table(E, ["engine_class"]).assign(tbin="all", phase="all"),
+                     rate_table(E[E.engine_class == "jet"], ["engine_class", "phase", "tbin"]),
+                     rate_table(E[E.engine_class == "jet"], ["engine_class", "phase"]).assign(tbin="all")],
+                    ignore_index=True)
     # the traffic that crossed the layer against the traffic that seeded, by engine class
     mix = (E.groupby("engine_class").agg(exposed=("flight", "size"), seeded=("made_streak", "sum")).reset_index())
     mix["share_exposed"] = mix.exposed / mix.exposed.sum()
     mix["share_seeded"] = mix.seeded / max(mix.seeded.sum(), 1)
-    return eff, mix
+    return eff, mix, phase_effect(E)
 
 
 def main():
@@ -191,10 +254,14 @@ def main():
         print("peak snowfall (mm/h):", S.snow_mm_h_max.describe().round(2).to_dict())
         print("snowfall under the streak (t/h water):", S.snow_flux_t_h.describe().round(0).to_dict())
     rv = pd.read_csv(a.review)
-    eff, mix = efficiency(evr, rv[rv.visual == "convincing"][["site", "day"]].drop_duplicates())
+    eff, mix, ph = efficiency(evr, rv[rv.visual == "convincing"][["site", "day"]].drop_duplicates())
     if len(eff):
         eff.to_csv(cen / "efficiency.csv", index=False)
         mix.to_csv(cen / "mix.csv", index=False)
+        if len(ph):
+            ph.to_csv(cen / "phase.csv", index=False)
+            print("\njet arrivals vs departures, odds ratio of leaving a streak (90%):")
+            print(ph.round(2).to_string(index=False))
         print("\nfirst passages through the seeding layer on catalogue days:")
         print(eff.round(3).to_string(index=False))
         print(mix.round(3).to_string(index=False))
