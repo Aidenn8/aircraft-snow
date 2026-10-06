@@ -30,23 +30,6 @@ def site_names() -> dict[str, str]:
     return dict(zip(s.radar, s.municipality))
 
 
-# names the type database gets wrong or ambiguous for these purposes
-TYPE_NAMES = {"B77L": "Boeing 777-200LR / 777F"}
-MAKERS = {"MCDONNELL-DOUGLAS": "McDonnell Douglas", "DE HAVILLAND CANADA": "De Havilland Canada"}
-
-
-def type_name(icao: str) -> str:
-    if icao in TYPE_NAMES:
-        return TYPE_NAMES[icao]
-    t = aircraft.types()
-    if icao in t.index and isinstance(t.loc[icao, "type_name"], str):
-        name = t.loc[icao, "type_name"]
-        # the database is upper case; keep model codes as they are, title-case the maker
-        maker, _, model = name.partition(" ")
-        return f"{MAKERS.get(maker, maker.title())} {model}".strip()
-    return icao
-
-
 def minus(v: float) -> str:
     return f"{v:.0f}".replace("-", "\u2212")
 
@@ -126,7 +109,7 @@ def main():
         alt = float(np.median(mp.alt_ft)) if "alt_ft" in mp else float(o.seed_alt_ft)
         temp = float(np.median(mp.temp_c)) if "temp_c" in mp else np.nan
         ax.set_title(f"{names.get(c.site, c.site)} ({c.site}), {when:%-d %b %Y %H:%M} UTC\n"
-                     f"{info.callsign.strip()} · {type_name(info.icao_type)}\n"
+                     f"{info.callsign.strip()} · {aircraft.display_name(info.icao_type)}\n"
                      f"{round(alt, -2):,.0f} ft · {minus(temp)} °C · {o.age_s / 60:.0f} min after passing",
                      fontsize=9.5, fontweight="normal", linespacing=1.35)
     for ax in axes.flat[n:]:

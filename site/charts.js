@@ -7,6 +7,10 @@
   const fmt = (v, d = 0) => (v == null ? "–" : Number(v).toFixed(d));
   const minus = (s) => String(s).replace(/^-/, "−");
 
+  // charts are drawn in a 640-unit-wide coordinate system, or 420 when the box is narrow
+  // (phones), so that their text is not scaled down to unreadable sizes
+  const chartW = (box) => (box && box.clientWidth && box.clientWidth < 520 ? 420 : 640);
+
   function el(name, attrs, parent) {
     const e = document.createElementNS(NS, name);
     for (const k in attrs) e.setAttribute(k, attrs[k]);
@@ -56,7 +60,7 @@
     const L = data.lifecycle;
     if (!box || !L) return;
     box.innerHTML = "";
-    const W = 640, H = 300, m = { l: 56, r: 16, t: 14, b: 44 };
+    const W = chartW(box), H = 300, m = { l: 56, r: 16, t: 14, b: 44 };
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
       "aria-label": "Reflectivity on the drifted track minus 5 to 8 km either side, against minutes since the aircraft passed" }, box);
     const x0 = -30, x1 = 120, y0 = -4, y1 = 16;
@@ -99,7 +103,7 @@
     const E = (data.efficiency || []).filter((r) => r.engine_class === "jet" && r.n >= 8);
     if (!box || !E.length) return;
     box.innerHTML = "";
-    const W = 640, H = 300, m = { l: 56, r: 16, t: 14, b: 44 };
+    const W = chartW(box), H = 300, m = { l: 56, r: 16, t: 14, b: 44 };
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
       "aria-label": "Share of jets crossing the cloud layer that left a streak, by air temperature, with the chance level" }, box);
     const x0 = -8, x1 = -23, y0 = 0, y1 = 0.5;            // colder to the right
@@ -154,64 +158,147 @@
     set("n-rot", c.n_rotations);
   }
 
-  // ---- census: event days by radar and winter ----
-  function censusRates() {
-    const box = document.getElementById("chart-census");
+  // ---- census: days beyond chance per radar, against the no-seeding expectation ----
+  const SITE_ORDER = ["KFTG", "KMPX", "KLOT", "KIND", "KDTX", "KCLE", "KBUF", "KPBZ"];
+  function censusSites() {
+    const box = document.getElementById("chart-census-sites");
     const C = data.census;
-    if (!box || !C || !C.rates) return;
+    if (!box || !C || !C.sites) return;
     box.innerHTML = "";
-    const rates = C.rates;
-    const winters = [...new Set(rates.map((r) => r.winter))].sort();
-    const sites = [...new Set(rates.map((r) => r.site))];
-    const total = (s) => rates.filter((r) => r.site === s).reduce((a, r) => a + r.event_days, 0);
-    sites.sort((a, b) => total(b) - total(a));
-    const colours = [css("--seed"), css("--accent-ink"), css("--muted")];
-    const W = 640, H = 300, m = { l: 56, r: 16, t: 14, b: 44 };
-    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Event days per radar and winter" }, box);
-    const ymax = Math.max(1, ...rates.map((r) => r.event_days));
-    const top = Math.ceil(ymax * 1.15);
-    const band = (W - m.l - m.r) / sites.length;
-    const bw = Math.min(18, (band * 0.8) / winters.length);
-    const ys = (v) => m.t + (top - v) / top * (H - m.t - m.b);
-    const step = top <= 6 ? 1 : Math.ceil(top / 5);
+    const rows = SITE_ORDER.map((s) => C.sites.find((r) => r.site === s)).filter(Boolean);
+    const W = chartW(box), H = 300, m = { l: 150, r: 24, t: 14, b: 44 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": "Days with p at or below 0.01 at each radar, against the number expected with no seeding" }, box);
+    const top = Math.max(2, ...rows.map((r) => Math.max(r.p01, r.expected_p01))) * 1.12;
+    const xs = (v) => m.l + v / top * (W - m.l - m.r);
+    const step = top <= 8 ? 1 : top <= 20 ? 2 : 5;
     const ticks = []; for (let t = 0; t <= top; t += step) ticks.push(t);
-    frame(svg, W, H, m, (v) => v, ys, [], ticks, "", "event days", (t) => t, (t) => t);
-    sites.forEach((s, i) => {
-      const cx = m.l + band * (i + 0.5);
-      const lab = el("text", { x: cx, y: H - m.b + 18, "text-anchor": "middle", class: "tick" }, svg);
-      lab.textContent = s;
-      winters.forEach((w, j) => {
-        const r = rates.find((q) => q.site === s && q.winter === w);
-        if (!r) return;
-        const x = cx + (j - (winters.length - 1) / 2) * (bw + 2) - bw / 2;
-        const y = ys(r.event_days);
-        const h = Math.max(ys(0) - y, r.event_days > 0 ? 2 : 0);
-        el("rect", { x, y: ys(0) - h, width: bw, height: h, rx: 2, fill: colours[j % colours.length] }, svg);
-        const hit = el("rect", { x: x - 2, y: m.t, width: bw + 4, height: H - m.t - m.b, fill: "transparent" }, svg);
-        hit.addEventListener("mousemove", (e) => showTip(e, `<b>${s}, winter ${w}</b><br>${r.event_days} event days ` +
-          `of ${r.tested} tested (${r.radar_days} radar-days)`));
-        hit.addEventListener("mouseleave", hideTip);
-      });
+    for (const t of ticks) el("line", { x1: xs(t), x2: xs(t), y1: m.t, y2: H - m.b, stroke: css("--rule"), "stroke-width": 1 }, svg);
+    frame(svg, W, H, m, xs, (v) => v, ticks, [], "radar-days with p ≤ 0.01", "", (t) => t, (t) => t);
+    const band = (H - m.t - m.b) / rows.length;
+    rows.forEach((r, i) => {
+      const cy = m.t + band * (i + 0.5);
+      const lab = el("text", { x: m.l - 10, y: cy + 4, "text-anchor": "end", class: "axis-label" }, svg);
+      lab.textContent = `${r.name} (${r.site})`;
+      el("rect", { x: xs(0), y: cy - band * 0.28, width: xs(r.expected_p01) - xs(0), height: band * 0.56, rx: 2,
+                   fill: css("--rule") }, svg);
+      el("circle", { cx: xs(r.p01), cy, r: 6, fill: css("--accent-ink"), stroke: css("--panel"), "stroke-width": 2 }, svg);
+      const hit = el("rect", { x: m.l, y: cy - band / 2, width: W - m.l - m.r, height: band, fill: "transparent" }, svg);
+      hit.addEventListener("mousemove", (e) => showTip(e, `<b>${r.name} (${r.site})</b><br>${r.p01} days with p ≤ 0.01 ` +
+        `of ${r.tested} tested<br><span class="muted">${fmt(r.expected_p01, 1)} expected with no seeding; ` +
+        `${r.p05} at p ≤ 0.05 (${fmt(r.expected_p05, 1)} expected)</span>`));
+      hit.addEventListener("mouseleave", hideTip);
     });
-    const leg = document.getElementById("legend-census");
-    if (leg) leg.innerHTML = winters.map((w, j) =>
-      `<span><i class="sw" style="border-radius:2px;background:${colours[j % colours.length]}"></i>winter ${w}</span>`).join("");
+    const leg = document.getElementById("legend-census-sites");
+    if (leg) leg.innerHTML = `<span><i class="sw" style="border-radius:50%;background:${css("--accent-ink")}"></i>observed</span>` +
+      `<span><i class="sw" style="border-radius:2px;background:${css("--rule")}"></i>expected with no seeding</span>`;
   }
 
-  // ---- census: seeding temperature by engine class ----
+  // ---- census: days beyond chance by hours of supercooled cloud ----
+  function wilson(k, n, z = 1.645) {
+    const p = k / n, d = 1 + z * z / n;
+    const c = (p + z * z / (2 * n)) / d, h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+    return [c - h, c + h];
+  }
+  function censusSlw() {
+    const box = document.getElementById("chart-census-slw");
+    const S = data.census && data.census.slw;
+    if (!box || !S || !S.length) return;
+    box.innerHTML = "";
+    const W = chartW(box), H = 300, m = { l: 56, r: 78, t: 14, b: 58 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": "Share of days with p at or below 0.05, by hours of supercooled cloud over the radar" }, box);
+    const rows = S.map((r) => ({ ...r, share: r.p05 / r.tested, ci: wilson(r.p05, r.tested) }));
+    const y1 = Math.max(0.1, ...rows.map((r) => r.ci[1])) * 1.1;
+    const ys = (v) => m.t + (y1 - v) / y1 * (H - m.t - m.b);
+    const band = (W - m.l - m.r) / rows.length;
+    const ticks = []; for (let t = 0; t <= y1 + 1e-9; t += 0.05) ticks.push(t);
+    frame(svg, W, H, m, (v) => v, ys, [], ticks, "hours of supercooled cloud water over the radar (HRRR)",
+          "days with p ≤ 0.05", (t) => t, (t) => `${Math.round(t * 100)}%`);
+    el("line", { x1: m.l, x2: W - m.r, y1: ys(0.05), y2: ys(0.05), stroke: css("--ink-2"), "stroke-width": 1.2, "stroke-dasharray": "5 4" }, svg);
+    const nl = el("text", { x: W - m.r + 6, y: ys(0.05) - 3, "text-anchor": "start", class: "note-text" }, svg);
+    nl.textContent = "no seeding";
+    const nl2 = el("text", { x: W - m.r + 6, y: ys(0.05) + 10, "text-anchor": "start", class: "note-text" }, svg);
+    nl2.textContent = "gives 5%";
+    rows.forEach((r, i) => {
+      const cx = m.l + band * (i + 0.5), bw = Math.min(70, band * 0.55);
+      el("rect", { x: cx - bw / 2, y: ys(r.share), width: bw, height: ys(0) - ys(r.share), rx: 3, fill: css("--accent-ink") }, svg);
+      el("line", { x1: cx, x2: cx, y1: ys(r.ci[0]), y2: ys(r.ci[1]), stroke: css("--ink"), "stroke-width": 1.5 }, svg);
+      const l1 = el("text", { x: cx, y: H - m.b + 18, "text-anchor": "middle", class: "tick" }, svg);
+      l1.textContent = r.slw_class;
+      const l2 = el("text", { x: cx, y: H - m.b + 32, "text-anchor": "middle", class: "note-text" }, svg);
+      l2.textContent = `${r.tested} days`;
+      const hit = el("rect", { x: cx - band / 2, y: m.t, width: band, height: H - m.t - m.b, fill: "transparent" }, svg);
+      hit.addEventListener("mousemove", (e) => showTip(e, `<b>${r.slw_class} of supercooled cloud</b><br>${r.p05} of ` +
+        `${r.tested} days at p ≤ 0.05 (${fmt(r.share * 100, 1)}%)<br><span class="muted">90% interval ` +
+        `${fmt(r.ci[0] * 100, 1)}–${fmt(r.ci[1] * 100, 1)}%; ${r.p01} at p ≤ 0.01</span>`));
+      hit.addEventListener("mouseleave", hideTip);
+    });
+    // the axis labels sit lower than usual to leave room for the day counts
+    svg.querySelectorAll("text.axis-label")[0].setAttribute("y", H - 4);
+  }
+
+  // ---- census: share of jets leaving a streak by temperature, arrivals and departures ----
+  function censusPhase() {
+    const box = document.getElementById("chart-census-phase");
+    const E = ((data.census && data.census.efficiency) || []).filter((r) => r.engine_class === "jet" && r.tbin !== "all" &&
+      (r.phase === "arrival" || r.phase === "departure") && r.n >= 20);
+    if (!box || !E.length) return;
+    box.innerHTML = "";
+    const mid = (s) => { const [a, b] = s.replace(/[(\]]/g, "").split(",").map(Number); return (a + b) / 2; };
+    const W = chartW(box), H = 300, m = { l: 56, r: 16, t: 14, b: 44 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": "Share of jets crossing the layer that left a streak, by temperature, for arrivals and departures" }, box);
+    const x0 = -4, x1 = -20;
+    const y1 = Math.max(0.2, ...E.map((r) => r.hi90)) * 1.08;
+    const xs = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+    const ys = (v) => m.t + (y1 - v) / y1 * (H - m.t - m.b);
+    const ticks = []; for (let t = 0; t <= y1 + 1e-9; t += 0.05) ticks.push(t);
+    frame(svg, W, H, m, xs, ys, [-4, -8, -12, -16, -20], ticks, "air temperature where the aircraft crossed the layer (°C)",
+          "share that left a streak", (t) => minus(t), (t) => `${Math.round(t * 100)}%`);
+    const series = [["arrival", css("--accent-ink"), -0.18], ["departure", css("--seed"), 0.18]];
+    for (const [ph, col, dx] of series) {
+      const g = E.filter((r) => r.phase === ph).map((r) => ({ ...r, mid: mid(r.tbin) + dx })).sort((a, b) => b.mid - a.mid);
+      el("polyline", { points: g.map((r) => `${xs(r.mid)},${ys(r.made_streak)}`).join(" "), fill: "none", stroke: col,
+                       "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+      for (const r of g) {
+        const cx = xs(r.mid);
+        el("line", { x1: cx, x2: cx, y1: ys(r.lo90), y2: ys(r.hi90), stroke: col, "stroke-width": 1.5 }, svg);
+        el("circle", { cx, cy: ys(r.chance), r: 4, fill: css("--panel"), stroke: col, "stroke-width": 1.5 }, svg);
+        el("circle", { cx, cy: ys(r.made_streak), r: 5.5, fill: col, stroke: css("--panel"), "stroke-width": 2 }, svg);
+        const hit = el("rect", { x: cx - 14, y: m.t, width: 28, height: H - m.t - m.b, fill: "transparent" }, svg);
+        const [a, b] = r.tbin.replace(/[(\]]/g, "").split(",");
+        hit.addEventListener("mousemove", (e) => showTip(e, `<b>jet ${ph}s, ${minus(b.trim())} to ${minus(a.trim())} °C</b><br>` +
+          `${r.k} of ${r.n} left a streak (${fmt(r.made_streak * 100, 1)}%)<br><span class="muted">90% interval ` +
+          `${fmt(r.lo90 * 100, 1)}–${fmt(r.hi90 * 100, 1)}%; by chance ${fmt(r.chance * 100, 1)}%</span>`));
+        hit.addEventListener("mouseleave", hideTip);
+      }
+    }
+    const leg = document.getElementById("legend-census-phase");
+    if (leg) leg.innerHTML = series.map(([ph, col]) => `<span><i class="sw" style="border-radius:50%;background:${col}"></i>jet ${ph}s</span>`).join("") +
+      `<span><i class="sw" style="border-radius:50%;background:transparent;border:1.5px solid ${css("--ink-2")}"></i>chance (rotated tracks)</span>`;
+  }
+
+  // ---- census: seeding temperature by engine class, against the quoted thresholds ----
   function censusTemps() {
     const box = document.getElementById("chart-temps");
     const S = (data.census && data.census.seeders) || [];
     if (!box || !S.length) return;
     box.innerHTML = "";
     const classes = ["jet", "turboprop", "piston"].filter((c) => S.some((r) => r.engine_class === c));
-    const W = 640, H = 260, m = { l: 90, r: 16, t: 14, b: 44 };
-    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Seeding temperature of each flight by engine class" }, box);
-    const x0 = 0, x1 = -30;
+    const W = chartW(box), H = 300, m = { l: 110, r: 16, t: 30, b: 44 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Seeding temperature of each catalogue flight by engine class" }, box);
+    const x0 = -4, x1 = -28;
     const xs = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
-    const row = (H - m.t - m.b) / classes.length;
-    frame(svg, W, H, m, xs, (v) => v, [0, -5, -10, -15, -20, -25, -30], [], "air temperature where the aircraft seeded (°C)", "",
+    // thresholds usually quoted (NCAR 2011): jets about -20 to -25 C, turboprops about -10 to -15 C
+    for (const [a, b, lab] of [[-10, -15, "quoted for turboprops"], [-20, -25, "quoted for jets"]]) {
+      el("rect", { x: xs(a), y: m.t, width: xs(b) - xs(a), height: H - m.t - m.b, fill: css("--rule"), opacity: 0.7 }, svg);
+      const t = el("text", { x: (xs(a) + xs(b)) / 2, y: m.t - 10, "text-anchor": "middle", class: "note-text" }, svg);
+      t.textContent = lab;
+    }
+    frame(svg, W, H, m, xs, (v) => v, [-4, -8, -12, -16, -20, -24, -28], [], "air temperature where the aircraft seeded (°C)", "",
           (t) => minus(t), (t) => t);
+    const row = (H - m.t - m.b) / classes.length;
     classes.forEach((c, i) => {
       const cy = m.t + row * (i + 0.5);
       const v = S.filter((r) => r.engine_class === c && r.seed_temp_c != null);
@@ -220,16 +307,28 @@
       v.forEach((r, k) => {
         const jitter = ((k * 37) % 17) / 17 - 0.5;
         const dot = el("circle", { cx: xs(r.seed_temp_c), cy: cy + jitter * row * 0.5, r: 4,
-                                   fill: c === "jet" ? css("--seed") : css("--accent-ink"), opacity: 0.8 }, svg);
-        dot.addEventListener("mousemove", (e) => showTip(e, `<b>${r.callsign} (${r.icao_type})</b><br>${r.site} ${r.day}<br>` +
-          `${minus(fmt(r.seed_temp_c, 1))} °C at ${Math.round(r.seed_alt_ft / 100) * 100} ft`));
+                                   fill: c === "jet" ? css("--accent-ink") : css("--seed"), opacity: 0.8 }, svg);
+        dot.addEventListener("mousemove", (e) => showTip(e, `<b>${r.callsign} (${r.type_name})</b><br>${r.site_name}, ${r.date}<br>` +
+          `${minus(fmt(r.seed_temp_c, 1))} °C at ${(Math.round(r.seed_alt_ft / 100) * 100).toLocaleString()} ft, ${r.phase}`));
         dot.addEventListener("mouseleave", hideTip);
       });
       if (v.length) {
-        const med = v.map((r) => r.seed_temp_c).sort((a, b) => a - b)[Math.floor(v.length / 2)];
-        el("line", { x1: xs(med), x2: xs(med), y1: cy - row * 0.35, y2: cy + row * 0.35, stroke: css("--ink"), "stroke-width": 2 }, svg);
+        const sorted = v.map((r) => r.seed_temp_c).sort((a, b) => a - b);
+        const med = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+        el("line", { x1: xs(med), x2: xs(med), y1: cy - row * 0.35, y2: cy + row * 0.35, stroke: css("--ink"), "stroke-width": 2.5 }, svg);
       }
     });
+  }
+
+  // ---- census: the catalogue ----
+  function catalogueTable() {
+    const body = document.getElementById("catalogue-rows");
+    const S = (data.census && data.census.seeders) || [];
+    if (!body || !S.length) return;
+    body.innerHTML = S.map((r) => `<tr><td>${r.date}</td><td>${r.site_name}</td><td>${r.callsign}</td>` +
+      `<td title="${r.type_name}">${r.icao_type}</td><td>${r.phase}</td><td class="num">${(Math.round(r.seed_alt_ft / 100) * 100).toLocaleString()}</td>` +
+      `<td class="num">${minus(fmt(r.seed_temp_c, 0))}</td><td class="num">${fmt(r.age_min, 0)}</td>` +
+      `<td class="num">${fmt(r.length_km, 0)}</td><td class="num">${fmt(r.snow_mm_h_max, 1)}</td></tr>`).join("");
   }
 
   function censusNumbers() {
@@ -238,23 +337,31 @@
     if (!C || !sec) return;
     sec.hidden = false;
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-    const r = C.rates || [];
-    set("c-radar-days", r.reduce((a, q) => a + q.radar_days, 0).toLocaleString());
-    set("c-tested", r.reduce((a, q) => a + q.tested, 0).toLocaleString());
-    set("c-events", r.reduce((a, q) => a + q.event_days, 0));
-    set("c-seeders", (C.seeders || []).length);
-    if (C.null) {
-      set("c-null-days", C.null.tested.toLocaleString());
-      set("c-null-selected", C.null.selected);
-    }
+    const T = C.total || {};
+    set("c-winters", C.winters_text || "");
+    set("c-radar-days", (T.radar_days || 0).toLocaleString());
+    set("c-tested", (T.tested || 0).toLocaleString());
+    set("c-p01", T.p01);
+    set("c-exp01", fmt(T.expected_p01, 1));
+    const K = C.catalogue || {};
+    set("c-cat-flights", K.flights);
+    set("c-cat-days", K.days);
+    set("c-cat-radars", K.radars);
+    set("c-cat-false", fmt(K.expected_false_p01, 0));
+    const note = (id, html) => { const e = document.getElementById(id); if (e && html) e.innerHTML = html; };
+    note("c-band-note", C.band_note);
+    note("c-phase-note", C.phase_note);
   }
 
-  function drawAll() { lifecycle(); efficiency(); censusRates(); censusTemps(); }
+  function drawAll() { lifecycle(); efficiency(); censusSites(); censusSlw(); censusPhase(); censusTemps(); }
   censusNumbers();
+  catalogueTable();
   aircraftTable();
   fillNumbers();
   drawAll();
-  // redraw when the theme changes so the token colours follow
+  // redraw on resize (the coordinate width depends on the box) and when the theme changes
+  let resizeTimer = null;
+  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawAll, 150); });
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
   new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 })();

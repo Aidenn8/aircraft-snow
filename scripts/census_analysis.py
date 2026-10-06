@@ -26,6 +26,7 @@ Three layers, kept apart because they rest on different things.
                                                                        efficiency.csv, mix.csv
 """
 import argparse
+import json
 import pathlib
 
 import numpy as np
@@ -234,6 +235,10 @@ def main():
         print(f"  catalogue day skipped: {m}")
     print(f"\n2. catalogue: {false['days']} days judged convincing; on them {false['flights_p01_all']:.0f} flights "
           f"matched at p <= 0.01 against {false['expected_false_p01']:.1f} expected by chance")
+    summary = {**false, "catalogue_flights": int(len(S)),
+               "catalogue_days": int(S[["site", "day"]].drop_duplicates().shape[0]) if len(S) else 0,
+               "catalogue_radars": int(S.site.nunique()) if len(S) else 0}
+    (cen / "catalogue_summary.json").write_text(json.dumps(summary, indent=1))
     if len(S):
         S.to_csv(cen / "seeders.csv", index=False)
         print(f"   {len(S)} catalogue flights (not doubtful) on {S[['site', 'day']].drop_duplicates().shape[0]} days, "

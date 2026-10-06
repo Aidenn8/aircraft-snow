@@ -62,3 +62,19 @@ def describe(hexes) -> pd.DataFrame:
     out = reg.reindex(idx)
     out["engine_class"] = out["engine_class"].fillna("unknown")
     return out
+
+
+# names the type database gets wrong or ambiguous for display
+DISPLAY_NAMES = {"B77L": "Boeing 777-200LR / 777F"}
+MAKERS = {"MCDONNELL-DOUGLAS": "McDonnell Douglas", "DE HAVILLAND CANADA": "De Havilland Canada"}
+
+
+def display_name(icao: str) -> str:
+    """Readable type name ('Boeing 737-800') for an ICAO type designator ('B738')."""
+    if icao in DISPLAY_NAMES:
+        return DISPLAY_NAMES[icao]
+    t = types()
+    if isinstance(icao, str) and icao in t.index and isinstance(t.loc[icao, "type_name"], str):
+        maker, _, model = t.loc[icao, "type_name"].partition(" ")
+        return f"{MAKERS.get(maker, maker.title())} {model}".strip()
+    return icao if isinstance(icao, str) else ""

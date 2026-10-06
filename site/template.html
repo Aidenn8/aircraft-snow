@@ -97,6 +97,12 @@ td:nth-child(n+4), th:nth-child(n+4) { text-align: right; }
 .chart .tick { font: 400 11px var(--font-ui); fill: var(--ink-2); }
 .chart .axis-label { font: 400 12px var(--font-ui); fill: var(--ink-2); }
 .chart .note-text { font: 400 11px var(--font-ui); fill: var(--muted); }
+.table-wrap.scroll { max-height: 560px; overflow: auto; }
+.table-wrap.scroll thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.catalogue th, .catalogue td { padding: 7px 10px; text-align: left; }
+.catalogue td:nth-child(n+6), .catalogue th:nth-child(n+6) { text-align: right; }
+.sub { font: 600 var(--step-1)/1.3 var(--font-display); margin: 36px 0 12px; color: var(--ink); }
+.gallery img { width: 100%; height: auto; display: block; border-radius: 4px; background: #fcfcfb; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--ink-2); margin-top: 8px; }
 .chart-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .chart-legend .sw.fill { background: var(--seed); }
@@ -221,29 +227,77 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
   <section id="census" aria-labelledby="h-census" hidden>
     <div class="eyebrow">The census</div>
     <h2 id="h-census">Eight airports, every winter day</h2>
-    <p class="lede">The same detector, run without a person looking, on every winter day at eight radars
-      near major airports. A day counts as an aircraft-snow day only if its evidence survives a 5%
-      false discovery rate across all the days tested.</p>
+    <p class="lede">The same detector, run without anyone looking, on every day from November to
+      March at eight radars near major airports, <span id="c-winters">–</span>. Each day&rsquo;s
+      flights are scored against copies of the same traffic rotated around the radar, and the
+      day&rsquo;s p-value says how often rotated traffic did as well.</p>
     <div class="stat-row">
       <div class="stat"><b id="c-radar-days">–</b><span>radar-days examined</span></div>
-      <div class="stat"><b id="c-tested">–</b><span>with cold, moist air and echo, so tested</span></div>
-      <div class="stat"><b id="c-events">–</b><span>aircraft-snow days</span></div>
-      <div class="stat"><b id="c-seeders">–</b><span>flights matched to streaks on those days</span></div>
-      <div class="stat"><b id="c-null-selected">–</b><span>of <span id="c-null-days">–</span> warm summer
-        radar-days, when no aircraft can make snow, that the same selection would have picked</span></div>
+      <div class="stat"><b id="c-tested">–</b><span>with cold, moist air aloft, so tested</span></div>
+      <div class="stat"><b id="c-p01">–</b><span>days with streaks beyond chance (p&nbsp;&le;&nbsp;0.01),
+        against <span id="c-exp01">–</span> expected with no seeding</span></div>
+      <div class="stat"><b id="c-cat-flights">–</b><span>flights in the catalogue, on
+        <span id="c-cat-days">–</span> days at <span id="c-cat-radars">–</span> radars, checked by eye</span></div>
     </div>
     <div class="two-col">
       <figure class="chart" style="margin:0">
-        <div id="chart-census"></div>
-        <div class="chart-legend" id="legend-census"></div>
-        <figcaption class="note">Aircraft-snow days per radar and winter (November to March).</figcaption>
+        <div id="chart-census-sites"></div>
+        <div class="chart-legend" id="legend-census-sites"></div>
+        <figcaption class="note">Days with p&nbsp;&le;&nbsp;0.01 at each radar (dots) and the number
+          expected if aircraft never made snow (bars): 1% of the days tested.</figcaption>
+      </figure>
+      <figure class="chart" style="margin:0">
+        <div id="chart-census-slw"></div>
+        <figcaption class="note">Share of days with p&nbsp;&le;&nbsp;0.05, by how many hours the
+          weather model put supercooled cloud water over the radar. Aircraft can only make ice in
+          such cloud; artefacts of the method would not care. Lines are 90% intervals.</figcaption>
+      </figure>
+    </div>
+    <div class="prose">
+      <p id="c-band-note"></p>
+    </div>
+
+    <h3 class="sub">What the streaks look like</h3>
+    <figure class="chart gallery" style="margin:0">
+      <img id="c-gallery" alt="Nine radar snapshots from five airports, each showing a thin streak of snow lying along the path of one aircraft, carried downwind" src="{{GALLERY_IMG}}">
+      <figcaption class="note">Orange: where the aircraft flew, carried by the wind to the time of
+        the radar scan. Dashed: its actual track over the previous hour. Each panel names the
+        flight, its type, and the altitude and air temperature where it crossed the cloud.</figcaption>
+    </figure>
+
+    <h3 class="sub">Which aircraft, and how cold</h3>
+    <div class="two-col">
+      <figure class="chart" style="margin:0">
+        <div id="chart-census-phase"></div>
+        <div class="chart-legend" id="legend-census-phase"></div>
+        <figcaption class="note">Jets crossing the seeding layer through clear air on catalogue
+          days: the share that left a streak, by air temperature. Open circles are the chance
+          level from rotated tracks; lines are 90% intervals.</figcaption>
       </figure>
       <figure class="chart" style="margin:0">
         <div id="chart-temps"></div>
-        <figcaption class="note">HRRR temperature where each matched flight seeded; the bar is the
-          median. Each dot is one flight; hover for details.</figcaption>
+        <figcaption class="note">Air temperature where each catalogue flight seeded (one dot per
+          flight; the bar is the median), against the thresholds usually quoted for jets and for
+          turboprops. Hover for details.</figcaption>
       </figure>
     </div>
+    <div class="prose">
+      <p id="c-phase-note"></p>
+    </div>
+    <div class="table-wrap scroll" tabindex="0" aria-label="Catalogue of flights matched to streaks">
+      <table class="catalogue">
+        <thead><tr><th scope="col">Date</th><th scope="col">Radar</th><th scope="col">Flight</th>
+          <th scope="col">Type</th><th scope="col">Phase</th><th scope="col">Altitude (ft)</th>
+          <th scope="col">Air (&deg;C)</th><th scope="col">Delay (min)</th><th scope="col">Streak (km)</th>
+          <th scope="col">Snow (mm/h)</th></tr></thead>
+        <tbody id="catalogue-rows"></tbody>
+      </table>
+    </div>
+    <p class="note">The catalogue: on days whose matches were judged by eye to be aircraft streaks,
+      every flight whose best match had p&nbsp;&le;&nbsp;0.01 and passed the objective checks (clear air
+      around the streak, no family of parallel bands, a fall speed snow can have, seeding below
+      16&nbsp;000&nbsp;ft). Rotated traffic on the same days would produce about
+      <span id="c-cat-false">–</span> matches at that level, so some rows are chance.</p>
   </section>
 
   <footer class="sources">
