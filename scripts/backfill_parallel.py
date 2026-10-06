@@ -76,6 +76,9 @@ def main():
         site, day = js.parent.name, js.stem
         if any(needs(js.parent / f"{day}{s}") for s in ("_streaks.parquet", "_screen_streaks.parquet")):
             jobs.append((str(ev), site, day))
+    # day by day across radars, never adjacent days of one radar at once: a day's cache
+    # clean-up deletes the radar files of the hour it shares with its neighbours
+    jobs.sort(key=lambda j: (j[2], j[1]))
     print(f"{len(jobs)} radar-days to backfill in {ev}", flush=True)
     with mp.get_context("spawn").Pool(a.workers) as pool:
         def stop(*_):
