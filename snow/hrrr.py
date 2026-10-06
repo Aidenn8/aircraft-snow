@@ -17,6 +17,7 @@ import datetime as dt
 import functools
 import json
 import pathlib
+import time
 
 import numpy as np
 import pandas as pd
@@ -36,11 +37,18 @@ HRRR_CRS = pyproj.CRS.from_proj4(
     "+proj=lcc +lat_0=38.5 +lon_0=-97.5 +lat_1=38.5 +lat_2=38.5 +a=6371229 +b=6371229 +units=m")
 
 _session = requests.Session()
+# one pooled connection per fetch thread: without it every thread beyond the default pool of
+# 10 opens (and resolves) a new connection per request, and under several census workers the
+# resolver starts failing
+_session.mount("https://", requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=32))
 _blosc = Blosc()
+ATTEMPTS = 7
 
 
 def _get(url: str) -> bytes | None:
-    for attempt in range(4):
+    """GET with retries and exponential backoff (1, 2, 4, ... 32 s): a network or resolver
+    hiccup of a minute does not fail the day."""
+    for attempt in range(ATTEMPTS):
         try:
             r = _session.get(url, timeout=60)
             if r.status_code == 404:
@@ -48,8 +56,9 @@ def _get(url: str) -> bytes | None:
             r.raise_for_status()
             return r.content
         except requests.RequestException:
-            if attempt == 3:
+            if attempt == ATTEMPTS - 1:
                 raise
+            time.sleep(2.0 ** attempt)
     return None
 
 
@@ -107,7 +116,7 @@ def _decode_tile(buf: bytes) -> np.ndarray:
 
 
 def profile(run: dt.datetime, lat: float, lon: float, box: int = 0,
-            levels=LEVELS, variables=VARS, workers: int = 32) -> pd.DataFrame:
+            levels=LEVELS, variables=VARS, workers: int = 16) -> pd.DataFrame:
     """Analysis profile at the grid point nearest (lat, lon) for one hourly run.
 
     With box > 0 the values are averaged over the (2 box + 1)^2 neighbouring points that

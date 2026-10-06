@@ -7,7 +7,9 @@ cd "$(dirname "$0")/.." || exit 1
 W=${1:-3}
 # wait for the winter 2024-25 run started separately
 while pgrep -f "scripts/census.py 2024-11-01" > /dev/null; do sleep 60; done
-for range in "2024-11-01 2025-03-31" "2023-11-01 2024-03-31" "2025-11-01 2026-03-31" "2023-03-10 2023-03-31"; do
+# each winter twice: the second pass retries days that failed (network, outages) and skips the rest
+for range in "2024-11-01 2025-03-31" "2023-11-01 2024-03-31" "2025-11-01 2026-03-31" "2023-03-10 2023-03-31" \
+             "2024-11-01 2025-03-31" "2023-11-01 2024-03-31" "2025-11-01 2026-03-31" "2023-03-10 2023-03-31"; do
   echo "=== $(date '+%F %T') census $range"
   tools/run_census_phase_a.sh ${=range} $W
 done
