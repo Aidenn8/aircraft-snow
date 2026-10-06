@@ -136,3 +136,39 @@ def find_streaks(g: GridScan) -> tuple[pd.DataFrame, np.ndarray]:
                      "tophat_mean": float(th[sel].mean())})
     lab = np.where(keep[lab], lab, 0)
     return pd.DataFrame(rows), lab
+
+
+PARALLEL_DEG = 15.0
+PARALLEL_KM = 60.0
+
+
+def orientations(lab: np.ndarray, labels) -> dict[int, float]:
+    """Orientation (deg, 0-180, counter-clockwise from +x) of each labelled object's
+    principal axis. Rows of the label image run along +y, columns along +x."""
+    out = {}
+    wanted = set(int(L) for L in labels)
+    for rp in measure.regionprops(lab):
+        if rp.label not in wanted:
+            continue
+        yy, xx = rp.coords[:, 0].astype(float), rp.coords[:, 1].astype(float)
+        if len(xx) < 3:
+            out[rp.label] = np.nan
+            continue
+        w, v = np.linalg.eigh(np.cov(np.vstack([xx - xx.mean(), yy - yy.mean()])))
+        vx, vy = v[:, np.argmax(w)]
+        out[rp.label] = float(np.degrees(np.arctan2(vy, vx)) % 180.0)
+    return out
+
+
+def parallel_counts(obj: pd.DataFrame, theta: dict[int, float], deg: float = PARALLEL_DEG,
+                    km: float = PARALLEL_KM) -> np.ndarray:
+    """For each object of one scan, the number of other objects within km of it (centroids)
+    whose orientation is within deg of its own. Natural snow bands come in families of
+    parallel lines; it depends on the radar echo alone, not on any flight."""
+    th = np.array([theta.get(int(L), np.nan) for L in obj.label])
+    x, y = obj.x.to_numpy(float), obj.y.to_numpy(float)
+    near = np.hypot(x[:, None] - x[None, :], y[:, None] - y[None, :]) <= km * 1e3
+    d = np.abs((th[:, None] - th[None, :] + 90.0) % 180.0 - 90.0)
+    par = near & (d <= deg) & np.isfinite(d)
+    np.fill_diagonal(par, False)
+    return par.sum(axis=1)

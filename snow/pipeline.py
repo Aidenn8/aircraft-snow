@@ -147,6 +147,11 @@ def streak_objects_day(prep: dict):
         frac = obj.label.map(lambda L: float(persist[lab == L].mean()))
         o = obj[frac.to_numpy() < PERSISTENT_OVERLAP]
         if not o.empty:
+            # orientation and the number of parallel neighbours (families of snow bands), from
+            # the echo alone; carried into the match tables for the band-filtered statistic
+            th = streaks.orientations(lab, o.label)
+            o = o.assign(orientation=[th.get(int(L), np.nan) for L in o.label],
+                         parallel=streaks.parallel_counts(o, th))
             kept.append((k, o, lab))
     prep["_streak_objects"] = (kept, persist, xs, ys)
     return kept, persist, xs, ys

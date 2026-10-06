@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import pytest
 
 from snow import streaks
 
@@ -52,3 +54,25 @@ def test_find_streaks_rejects_bright_convective_line():
     obj, lab = streaks.find_streaks(_grid(z))
     assert len(obj) == 1 and obj.iloc[0].z_max <= streaks.MAX_PEAK_DBZ
     assert (lab[160:163, 40:80] == 0).all()
+
+
+def test_orientations_of_lines():
+    lab = np.zeros((60, 60), int)
+    lab[30, 5:55] = 1                                   # along +x: 0 deg
+    for i in range(40):                                 # along x = y: 45 deg
+        lab[10 + i, 10 + i] = 2
+    lab[5:50, 50] = 3                                   # along +y: 90 deg
+    th = streaks.orientations(lab, [1, 2, 3])
+    assert min(th[1], 180.0 - th[1]) == pytest.approx(0.0, abs=1e-6)
+    assert th[2] == pytest.approx(45.0, abs=1e-6)
+    assert th[3] == pytest.approx(90.0, abs=1e-6)
+
+
+def test_parallel_counts_band_family():
+    # four parallel lines 10 km apart, one crossing line, one parallel line 200 km away
+    obj = pd.DataFrame({"label": [1, 2, 3, 4, 5, 6],
+                        "x": [0.0, 0.0, 0.0, 0.0, 5e3, 2e5],
+                        "y": [0.0, 1e4, 2e4, 3e4, 1.5e4, 0.0]})
+    theta = {1: 10.0, 2: 12.0, 3: 178.0, 4: 5.0, 5: 80.0, 6: 10.0}
+    n = streaks.parallel_counts(obj, theta)
+    assert list(n) == [3, 3, 3, 3, 0, 0]               # 178 deg is 12 deg from 10 deg
