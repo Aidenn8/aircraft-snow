@@ -18,6 +18,14 @@ separately for 24- and 200-rotation runs and within strata of the day's chance-m
 and a real day's p-value is the share of its pool at or above its z (self_calibrate). Under
 no seeding the real set is one more rotation, so this is valid, and the pool is large.
 
+Band-filtered census (--band-max N). Runways are chosen by the wind and snow bands line up
+with it, so on a banded day pieces of bands match the real arrival paths more often than
+rotated copies of them. Whether a streak object sits in a family of parallel ones (its
+'parallel' count: other objects in the same scan within 15 deg and 60 km) depends on the
+radar alone, so every day can be re-scored, real and rotated sets alike, without objects
+having more than N parallel neighbours (from the saved match tables), and the whole
+analysis below repeated on that score; write it to its own --out.
+
 What is reported. (1) How many days had aircraft snow: the days at or below p = 0.01 (0.05)
 beyond the 1% (5%) expected under no seeding, with an interval; Storey's estimate of all
 event days as a noisier companion. (2) Which days: Benjamini-Hochberg at --q, Storey
@@ -47,7 +55,31 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 LAMBDA = 0.5
 
 
-def radar_days(ev_root: pathlib.Path) -> pd.DataFrame:
+def rescore(path: pathlib.Path, band_max: int) -> dict:
+    """The day's streak statistic re-computed from its saved match table without objects
+    having more than band_max parallel neighbours (same keys as the saved 'streaks')."""
+    from snow import match, pipeline
+    if not path.exists():
+        return {"E": 0.0, "p_day": 1.0, "n_streaks": 0, "n_matched": 0}
+    S = pd.read_parquet(path)
+    if S.empty:
+        return {"E": 0.0, "p_day": 1.0, "n_streaks": 0, "n_matched": 0}
+    if "parallel" not in S:
+        raise RuntimeError(f"{path}: no parallel counts (run scripts/backfill_parallel.py)")
+    R = len(S.placebo_cov.iloc[0])
+    angles = {len(pipeline.CONFIRM_ANGLES): pipeline.CONFIRM_ANGLES,
+              len(pipeline.SCREEN_ANGLES): pipeline.SCREEN_ANGLES}[R]
+    S = S[S.parallel <= band_max].reset_index(drop=True)
+    if S.empty:
+        return {"E": 0.0, "p_day": 1.0, "n_streaks": 0, "n_matched": 0, "n_rotations": R,
+                "E_null": [0.0] * R}
+    st = match.day_statistic(S, angles)
+    st["n_rotations"] = R
+    st["fdr"] = match.empirical_fdr(S, thresholds=(0.01, 0.05), angles=angles).to_dict(orient="records")
+    return st
+
+
+def radar_days(ev_root: pathlib.Path, band_max: int | None = None) -> pd.DataFrame:
     rows = []
     for path in sorted(ev_root.glob("*/*.json")):
         if "_" in path.stem:          # auxiliary results (_dayswap, _shiftnull), not radar-days
@@ -57,6 +89,8 @@ def radar_days(ev_root: pathlib.Path) -> pd.DataFrame:
         if not r["screened_out"]:
             sc = s.get("streaks_screen") or s.get("streaks", {})
             sk = s.get("streaks", {})
+            if band_max is not None:
+                sk = rescore(path.parent / f"{path.stem}_streaks.parquet", band_max)
             rv = s.get("streaks_reverse", {})
             confirmed = sk.get("n_rotations", 0) > len(sc.get("E_null", [])) > 0
             p_rank = sk.get("p_day", 1.0)
@@ -251,10 +285,12 @@ def main():
     ap.add_argument("--q", type=float, default=0.05)
     ap.add_argument("--alpha", type=float, default=0.01)
     ap.add_argument("--top", type=int, default=30)
+    ap.add_argument("--band-max", type=int, default=None,
+                    help="re-score days without streak objects with more parallel neighbours than this")
     a = ap.parse_args()
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    rd = radar_days(pathlib.Path(a.events))
+    rd = radar_days(pathlib.Path(a.events), a.band_max)
     tested = tested_days(rd)
     if tested.empty:
         rd.drop(columns=["_E_all"], errors="ignore").to_csv(out / "radar_days.csv", index=False)
@@ -271,7 +307,7 @@ def main():
     summ["census"]["p_cutoff"] = cutoff
     nroot = pathlib.Path(a.null_events)
     if nroot.exists() and any(nroot.glob("*/*.json")):
-        nd = tested_days(radar_days(nroot))
+        nd = tested_days(radar_days(nroot, a.band_max))
         if len(nd):
             nd = self_calibrate(nd)
             nd["p_rank"] = nd.p_day
@@ -293,8 +329,8 @@ def main():
                             "excess": k1 - f0 * n1, "excess_lo": k1 - hi0 * n1, "excess_hi": k1 - lo0 * n1}
             summ["calibrated"] = cal
     (out / "summary.json").write_text(json.dumps(summ, indent=1, default=float))
-    tested["p_place"] = [place_p(pathlib.Path(a.events) / r.site / f"{r.day}_streaks.parquet")
-                         for r in tested.itertuples()]
+    tested["p_place"] = ([place_p(pathlib.Path(a.events) / r.site / f"{r.day}_streaks.parquet")
+                          for r in tested.itertuples()] if a.band_max is None else np.nan)
     keep = ["site", "day", "p_day", "z_day", "p_rank", "p_place", "chance_level", "stratum", "q_value", "event"]
     rd = rd.drop(columns=["p_day", "_E_all"], errors="ignore").merge(tested[keep], on=["site", "day"], how="left")
     tested = tested.drop(columns=["_E_all"])
