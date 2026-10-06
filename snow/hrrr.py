@@ -91,8 +91,18 @@ def _tile(run: dt.datetime, level: str, var: str, cj: int, ci: int) -> np.ndarra
     raw = _get(url)
     if raw is None:
         return None
-    a = np.frombuffer(_blosc.decode(raw), "<f4").reshape(CHUNK, CHUNK).copy()
-    a[a == -9999.0] = np.nan
+    return _decode_tile(_blosc.decode(raw))
+
+
+def _decode_tile(buf: bytes) -> np.ndarray:
+    """A decompressed chunk as float32 with fill values as NaN. The archive's data type
+    changed: 2023 runs are float16 with fill -10000, 2025 runs float32 with fill -9999
+    (each array's .zarray says which); the byte count tells them apart."""
+    width = len(buf) // (CHUNK * CHUNK)
+    if width not in (2, 4) or len(buf) != width * CHUNK * CHUNK:
+        raise ValueError(f"HRRR chunk of {len(buf)} bytes is neither float16 nor float32 {CHUNK}x{CHUNK}")
+    a = np.frombuffer(buf, "<f2" if width == 2 else "<f4").astype(np.float32).reshape(CHUNK, CHUNK)
+    a[(a == -9999.0) | (a == -10000.0)] = np.nan
     return a
 
 
