@@ -93,3 +93,16 @@ def test_screen_passes():
     assert not pipeline.screen_passes({"p_day": 0.08, "p_day_gamma": 0.3})
     assert not pipeline.screen_passes({"p_day": 0.08, "p_day_gamma": float("nan")})
     assert not pipeline.screen_passes({})
+
+
+def test_usable_profiles_drops_missing_runs():
+    import numpy as np
+    import pandas as pd
+    import pytest
+    runs = pd.date_range("2026-02-20 11:00", periods=27, freq="h")
+    rows = [{"run": r, "p": p, "HGT": (np.nan if k in (23, 24) else 1000.0 + p)} for k, r in enumerate(runs)
+            for p in (700, 850)]
+    out = pipeline.usable_profiles(pd.DataFrame(rows))
+    assert out.run.nunique() == 25 and out.HGT.notna().all()
+    with pytest.raises(RuntimeError):
+        pipeline.usable_profiles(pd.DataFrame(rows).assign(HGT=np.nan))

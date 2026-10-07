@@ -90,6 +90,20 @@ def track_points(pos: pd.DataFrame, profs: pd.DataFrame, sw0, alt_max_ft: float 
     return pts, drift, dense, drift_dense
 
 
+MIN_PROFILE_RUNS = 12
+
+
+def usable_profiles(profs: pd.DataFrame, label: str = "") -> pd.DataFrame:
+    """Drop hourly runs with no heights at all (the analysis archive has occasional gaps, e.g.
+    10-11 UTC on 21 February 2026); every point then uses the nearest run that exists. A day
+    with fewer than MIN_PROFILE_RUNS usable runs is not analysed."""
+    ok = profs.groupby("run").HGT.transform(lambda h: h.notna().any())
+    out = profs[ok]
+    if out.run.nunique() < MIN_PROFILE_RUNS:
+        raise RuntimeError(f"{label}: only {out.run.nunique()} usable HRRR runs")
+    return out.reset_index(drop=True)
+
+
 def prepare(site: str, day: dt.date, scans=None, alt_max_ft: float | None = None):
     """Everything the event test needs: grids, points with drift, the radar sweep header."""
     t0, t1 = day_window(day)
@@ -102,7 +116,8 @@ def prepare(site: str, day: dt.date, scans=None, alt_max_ft: float | None = None
     pos = flights.segment(flights.load_window(lat0, lon0, MAX_RANGE_M / 1000 + 5,
                                               t0 - dt.timedelta(minutes=5), t1, site=site))
     runs = [t0.replace(tzinfo=None) + dt.timedelta(hours=k) for k in range(-1, 26)]
-    profs = pd.concat([hrrr.profile(r, lat0, lon0, box=HRRR_BOX) for r in runs], ignore_index=True)
+    profs = usable_profiles(pd.concat([hrrr.profile(r, lat0, lon0, box=HRRR_BOX) for r in runs],
+                                      ignore_index=True), f"{site} {day}")
     pts, drift, dense, drift_dense = track_points(pos, profs, sw0, alt_max_ft)
     # every aircraft at any altitude (including ones on the ground) is masked out of the radar
     allpos = flights.load_window(lat0, lon0, MAX_RANGE_M / 1000 + 15, t0 - dt.timedelta(hours=1),
