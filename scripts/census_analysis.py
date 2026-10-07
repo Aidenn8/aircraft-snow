@@ -89,9 +89,18 @@ def by_slw(cen: pathlib.Path) -> pd.DataFrame:
     return pd.concat([s.assign(stratum="all"), st], ignore_index=True)
 
 
-def catalogue(cen: pathlib.Path, evr: pathlib.Path, review: pathlib.Path, alpha: float):
-    rv = pd.read_csv(review)
-    days = rv[rv.visual == "convincing"][["site", "day"]].drop_duplicates()
+def day_set(cen: pathlib.Path, review: pathlib.Path, which: str) -> pd.DataFrame:
+    """The days the catalogue and the physics are drawn from: 'visual' (judged convincing by
+    eye, the default) or 'p01' (every tested day at calibrated p <= 0.01, no human judgement;
+    a check that the physical results do not hinge on the visual review)."""
+    if which == "visual":
+        rv = pd.read_csv(review)
+        return rv[rv.visual == "convincing"][["site", "day"]].drop_duplicates()
+    t = tested(cen)
+    return t[t.p_day <= 0.01][["site", "day"]].drop_duplicates()
+
+
+def catalogue(cen: pathlib.Path, evr: pathlib.Path, days: pd.DataFrame, alpha: float):
     insp = pd.read_csv(cen / "inspection_flights.csv")
     rd = pd.read_csv(cen / "radar_days.csv")
     rows, missing = [], []
@@ -212,6 +221,9 @@ def main():
     ap.add_argument("--band", default=None, help="the band-filtered census_summary output")
     ap.add_argument("--events", default=str(ROOT / "data" / "events"))
     ap.add_argument("--review", default=str(ROOT / "results" / "census" / "visual_review.csv"))
+    ap.add_argument("--set", choices=["visual", "p01"], default="visual",
+                    help="days for the catalogue and physics: judged convincing, or all at p <= 0.01")
+    ap.add_argument("--suffix", default="", help="appended to the catalogue/physics output names")
     ap.add_argument("--alpha", type=float, default=0.01)
     a = ap.parse_args()
     cen, evr = pathlib.Path(a.census), pathlib.Path(a.events)
@@ -230,7 +242,8 @@ def main():
         print("\nby hours of supercooled cloud over the radar:")
         print(slw[slw.stratum == "all"].round(3).to_string(index=False))
 
-    S, false, missing = catalogue(cen, evr, pathlib.Path(a.review), a.alpha)
+    days = day_set(cen, pathlib.Path(a.review), a.set)
+    S, false, missing = catalogue(cen, evr, days, a.alpha)
     for m in missing:
         print(f"  catalogue day skipped: {m}")
     print(f"\n2. catalogue: {false['days']} days judged convincing; on them {false['flights_p01_all']:.0f} flights "
@@ -238,16 +251,16 @@ def main():
     summary = {**false, "catalogue_flights": int(len(S)),
                "catalogue_days": int(S[["site", "day"]].drop_duplicates().shape[0]) if len(S) else 0,
                "catalogue_radars": int(S.site.nunique()) if len(S) else 0}
-    (cen / "catalogue_summary.json").write_text(json.dumps(summary, indent=1))
+    (cen / f"catalogue_summary{a.suffix}.json").write_text(json.dumps(summary, indent=1))
     if len(S):
-        S.to_csv(cen / "seeders.csv", index=False)
+        S.to_csv(cen / f"seeders{a.suffix}.csv", index=False)
         print(f"   {len(S)} catalogue flights (not doubtful) on {S[['site', 'day']].drop_duplicates().shape[0]} days, "
               f"{S.site.nunique()} radars")
         bt = (S.groupby(["engine_class", "icao_type"]).agg(flights=("flight", "size"),
                                                             temp_median=("seed_temp_c", "median"),
                                                             alt_median_ft=("seed_alt_ft", "median"))
               .reset_index().sort_values("flights", ascending=False))
-        bt.to_csv(cen / "by_type.csv", index=False)
+        bt.to_csv(cen / f"by_type{a.suffix}.csv", index=False)
         print("\n3. seeding temperature (C) by engine class:")
         print(S.groupby("engine_class").seed_temp_c.describe().round(1).to_string())
         print("seeding altitude (ft):", S.seed_alt_ft.describe().round(0).to_dict())
@@ -258,13 +271,12 @@ def main():
               S.width_km.describe().round(1).to_dict())
         print("peak snowfall (mm/h):", S.snow_mm_h_max.describe().round(2).to_dict())
         print("snowfall under the streak (t/h water):", S.snow_flux_t_h.describe().round(0).to_dict())
-    rv = pd.read_csv(a.review)
-    eff, mix, ph = efficiency(evr, rv[rv.visual == "convincing"][["site", "day"]].drop_duplicates())
+    eff, mix, ph = efficiency(evr, days)
     if len(eff):
-        eff.to_csv(cen / "efficiency.csv", index=False)
-        mix.to_csv(cen / "mix.csv", index=False)
+        eff.to_csv(cen / f"efficiency{a.suffix}.csv", index=False)
+        mix.to_csv(cen / f"mix{a.suffix}.csv", index=False)
         if len(ph):
-            ph.to_csv(cen / "phase.csv", index=False)
+            ph.to_csv(cen / f"phase{a.suffix}.csv", index=False)
             print("\njet arrivals vs departures, odds ratio of leaving a streak (90%):")
             print(ph.round(2).to_string(index=False))
         print("\nfirst passages through the seeding layer on catalogue days:")
