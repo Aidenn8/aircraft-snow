@@ -194,9 +194,15 @@ with 4 or more hours than with none. The outcome is reported whichever way it go
 Visual review and the catalogue. For each candidate day (lowest calibrated p first) a review
 sheet (scripts/review_day.py) shows the eight best matches: reflectivity around the streak,
 the flight's track and its drifted track. Each day is recorded in
-results/census/visual_review.csv as convincing (thin streaks in otherwise clear or light
-echo lying along drifted tracks, growing over scans), ambiguous, or doubtful (matches are
-pieces of bands, cells or widespread echo), with a note. Objective per-flight measures from
+results/census/visual_review.csv as convincing (at least one match looks like an aircraft
+streak: thin, in otherwise clear or light echo, lying along the drifted track, ideally
+growing over scans or tracing a turn), ambiguous, or doubtful (matches are pieces of bands,
+cells or widespread echo), with a note. The label judges appearance only; physical checks
+are applied per flight afterwards (below), so a day whose only clear streak implies an
+implausible fall speed or seeding altitude is convincing by eye but adds no flight to the
+catalogue. Days reviewed: every day with calibrated p <= 0.01 in the census or the
+band-filtered census, and every day with p <= 0.05 that has a flight the rules call
+convincing. Objective per-flight measures from
 scripts/inspect_candidates.py are recorded beside it: isolation (share of a 2-8 km ring
 around the streak with echo >= 5 dBZ), scans matched, parallel neighbours, implied fall
 speed and seeding altitude; a flight is 'doubtful' if isolation > 0.6, 3 or more parallel
