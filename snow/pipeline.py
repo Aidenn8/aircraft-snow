@@ -233,7 +233,7 @@ def drop_radar_cache(site: str, day: dt.date):
                   *(radar.CACHE / "l3").glob(f"{site3}_N0C_{d:%Y_%m_%d}_*")]:
             t = dt.datetime.strptime(p.name[-19:], "%Y_%m_%d_%H_%M_%S").replace(tzinfo=UTC)
             if lo <= t <= hi:
-                p.unlink()
+                p.unlink(missing_ok=True)       # a neighbouring day may have removed it
                 n += 1
     return n
 
