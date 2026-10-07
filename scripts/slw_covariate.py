@@ -12,6 +12,9 @@ point average over the radar; analyses for 12 UTC to 11 UTC) and records
   slw_hours      hours (of 24) in which some level in 2 000-24 000 ft with T <= -4 C has cloud
                  water mixing ratio >= --threshold g/kg
   slw_hours_low  the same with a ceiling of 16 000 ft (where streaks are seen best)
+  slw_hours_cold the same with cloud water at -10 C or colder (exploratory: added after the
+                 first two winters showed the warm winter 2023-24 with no excess and the
+                 efficiency curve showed seeding weak above about -8 C)
   slw_max_gkg    largest such cloud water over the day
   cold_hours     hours in which some level in the layer is at -4 C or colder
   t700_c         mean 700 hPa temperature
@@ -32,6 +35,7 @@ FT = 0.3048
 LAYER_FT = (2_000.0, 24_000.0)
 LOW_CEILING_FT = 16_000.0
 T_MAX_C = -4.0
+T_COLD_C = -10.0
 
 
 def cached_locations() -> dict[str, tuple[float, float]]:
@@ -58,10 +62,13 @@ def hour_metrics(p: pd.DataFrame, threshold: float) -> dict:
     w = p.CLMR.to_numpy()
     lay = (z >= LAYER_FT[0]) & (z <= LAYER_FT[1]) & (t <= T_MAX_C)
     low = lay & (z <= LOW_CEILING_FT)
+    cold = lay & (t <= T_COLD_C)
     wmax = float(np.nanmax(w[lay])) if lay.any() else 0.0
     wlow = float(np.nanmax(w[low])) if low.any() else 0.0
+    wcold = float(np.nanmax(w[cold])) if cold.any() else 0.0
     t700 = p.loc[p.p == 700, "temp"]
-    return {"slw": wmax >= threshold, "slw_low": wlow >= threshold, "w": wmax, "cold": bool(lay.any()),
+    return {"slw": wmax >= threshold, "slw_low": wlow >= threshold, "slw_cold": wcold >= threshold,
+            "w": wmax, "cold": bool(lay.any()),
             "t700": float(t700.iloc[0]) if len(t700) else np.nan}
 
 
@@ -72,6 +79,7 @@ def day_metrics(site: str, day: dt.date, loc: tuple[float, float], threshold: fl
     return {"site": site, "day": str(day),
             "slw_hours": sum(h["slw"] for h in hours),
             "slw_hours_low": sum(h["slw_low"] for h in hours),
+            "slw_hours_cold": sum(h["slw_cold"] for h in hours),
             "slw_max_gkg": max(h["w"] for h in hours),
             "cold_hours": sum(h["cold"] for h in hours),
             "t700_c": float(np.nanmean([h["t700"] for h in hours]))}

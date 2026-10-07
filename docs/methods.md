@@ -175,6 +175,21 @@ at -4 C or colder. Artefacts of the method have no reason to follow it; real see
 It is a coarse proxy (one column for a domain 130 km across), used to stratify the census,
 not to select days.
 
+A prediction recorded before winter 2025-26 was analysed (written 6 October 2026, 17:18
+local, when 10 of its ~1 200 radar-days had run and none had been looked at). The first two
+winters disagreed: 2024-25 had 20 days at calibrated p <= 0.01 against 9.5 expected, while
+the warm El Nino winter 2023-24 had 8 against 8.5. Their inputs were alike (scans, supercooled
+cloud hours, flights within 10%); 2023-24 was 1.6 C warmer at 700 hPa on average. Since the
+catalogue's seeding efficiency falls off above about -8 C, an exploratory covariate was added:
+hours of HRRR supercooled cloud water at -10 C or colder (slw_hours_cold). Over the two
+winters, days at p <= 0.05 by that covariate: 0 h, 29 against 39.8 expected; 1-3 h, 51
+against 32.2; 4-24 h, 40 against 18.1. Because the covariate was chosen after seeing these
+data, it is tested on 2025-26 alone, with these predictions: (1) days with no supercooled
+cloud at -10 C or colder show no excess at p <= 0.05 (observed within the one-sided Poisson
+95% range of 5% of them); (2) days with 4 or more such hours show an excess at p <= 0.05
+(one-sided Poisson p < 0.05 against 5% of them); (3) the share of days at p <= 0.05 is larger
+with 4 or more hours than with none. The outcome is reported whichever way it goes.
+
 Visual review and the catalogue. For each candidate day (lowest calibrated p first) a review
 sheet (scripts/review_day.py) shows the eight best matches: reflectivity around the streak,
 the flight's track and its drifted track. Each day is recorded in
