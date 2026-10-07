@@ -176,7 +176,8 @@ It is a coarse proxy (one column for a domain 130 km across), used to stratify t
 not to select days.
 
 A prediction recorded before winter 2025-26 was analysed (written 6 October 2026, 17:18
-local, when 10 of its ~1 200 radar-days had run and none had been looked at). The first two
+local, when 10 of its ~1 200 radar-days had run; a summary run minutes earlier had scored
+the 3 of them that were tested, 2 at p <= 0.05, without their covariate being looked at). The first two
 winters disagreed: 2024-25 had 20 days at calibrated p <= 0.01 against 9.5 expected, while
 the warm El Nino winter 2023-24 had 8 against 8.5. Their inputs were alike (scans, supercooled
 cloud hours, flights within 10%); 2023-24 was 1.6 C warmer at 700 hPa on average. Since the
