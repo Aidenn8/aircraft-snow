@@ -79,10 +79,12 @@ def rescore(path: pathlib.Path, band_max: int) -> dict:
     return st
 
 
-def radar_days(ev_root: pathlib.Path, band_max: int | None = None) -> pd.DataFrame:
+def radar_days(ev_root: pathlib.Path, band_max: int | None = None, before: str | None = None) -> pd.DataFrame:
     rows = []
     for path in sorted(ev_root.glob("*/*.json")):
         if "_" in path.stem:          # auxiliary results (_dayswap, _shiftnull), not radar-days
+            continue
+        if before and path.stem >= before:   # days held out (e.g. a winter kept for a test)
             continue
         s = json.loads(path.read_text())
         r = {"site": s["site"], "day": s["day"], "screened_out": s.get("screened_out", "")}
@@ -285,12 +287,13 @@ def main():
     ap.add_argument("--q", type=float, default=0.05)
     ap.add_argument("--alpha", type=float, default=0.01)
     ap.add_argument("--top", type=int, default=30)
+    ap.add_argument("--before", default=None, help="only radar-days before this date (YYYY-MM-DD)")
     ap.add_argument("--band-max", type=int, default=None,
                     help="re-score days without streak objects with more parallel neighbours than this")
     a = ap.parse_args()
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    rd = radar_days(pathlib.Path(a.events), a.band_max)
+    rd = radar_days(pathlib.Path(a.events), a.band_max, a.before)
     tested = tested_days(rd)
     if tested.empty:
         rd.drop(columns=["_E_all"], errors="ignore").to_csv(out / "radar_days.csv", index=False)
