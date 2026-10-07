@@ -191,6 +191,14 @@ cloud at -10 C or colder show no excess at p <= 0.05 (observed within the one-si
 (one-sided Poisson p < 0.05 against 5% of them); (3) the share of days at p <= 0.05 is larger
 with 4 or more hours than with none. The outcome is reported whichever way it goes.
 
+Outcome (scripts/prediction_2526.py, scored 7 October 2026 after the 2025-26 census
+finished; 948 tested radar-days). (1) No supercooled cloud at -10 C or colder: 23 of 398
+days at p <= 0.05 against 19.9 expected (one-sided Poisson p = 0.27), no excess, as
+predicted. (2) 4 or more hours: 20 of 197 against 9.9 expected (p = 0.003), an excess, as
+predicted. (3) Shares 10.2% against 5.8%, as predicted. Days with 1-3 hours: 35 of 353
+against 17.7 (p = 0.0002). At p <= 0.01: 5 of 398, 12 of 353 and 10 of 197 days, against
+4.0, 3.5 and 2.0 expected. All three predictions held.
+
 Visual review and the catalogue. For each candidate day (lowest calibrated p first) a review
 sheet (scripts/review_day.py) shows the eight best matches: reflectivity around the streak,
 the flight's track and its drifted track. Each day is recorded in
