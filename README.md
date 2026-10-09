@@ -12,11 +12,15 @@ aircraft that made it using open ADS-B flight tracks, and measures how often it 
 what temperatures, and which aircraft do it, with false-alarm rates measured rather than
 assumed.
 
-*Status: the detector is built and validated on the Denver case of 25 January 2025 (the
-day's flights beat all 200 rotated copies; 16 flights matched streaks along their
-wind-carried tracks against 3.6 expected by chance; see `REPORT.md`). The census of eight
-radars over the winters 2023-24 to 2025-26 and its warm-season false-alarm calibration are
-running; results will be summarised here when they are complete.*
+**Results** (`REPORT.md`): over 2,888 tested winter radar-days at eight radars (November
+2023 to March 2026, plus March 2023), 58 days show flight-streak matches beyond chance at
+p <= 0.01 where 29 would be false alarms, a rate measured on 744 warm days on which no
+aircraft can make ice. The excess follows supercooled cloud over the radar, as predicted
+before the last winter was analysed. A catalogue of 163 flights on days judged convincing
+by eye (seven radars; `results/census/seeders.csv`) shows seeding
+at a median of 7 300 ft and -13 C, and arriving jets leaving streaks at about five times
+the odds of departing ones. The Denver case of 25 January 2025 is worked through in detail:
+16 flights matched streaks along their wind-carried tracks against 3.6 expected by chance.
 
 ## How it works
 

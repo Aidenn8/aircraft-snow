@@ -1,0 +1,1 @@
+site,day,screened_out,n_flights,n_scans,n_streaks,n_matched,n_flights_matched,E_screen,z_screen,p_screen,confirmed,E,n_rotations,p_rank,p_day,p_gamma,p_rev,max_temp_c,seconds,n_flights_p0.01,exp_false_p0.01,n_flights_p0.05,exp_false_p0.05,chance_level,stratum,z_day,p_cal,pool_n,q_value,event,p_place

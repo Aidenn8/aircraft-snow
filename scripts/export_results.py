@@ -3,7 +3,8 @@
 usage: export_results.py
 
 results/census/        census_summary.py and census_analysis.py tables for the winters
-results/census_null/   the same for the warm-season null days
+results/census_band/   the same for the census re-scored without parallel bands
+                       (warm-season null days: results/census/null_days.csv)
 results/injection/     injection-recovery trials (all runs of the final model)
 results/denver/        the Denver case: streak descriptions, exposure table, drift check,
                        dual-polarisation comparison, day summary
@@ -32,10 +33,14 @@ def copy_tables(src: pathlib.Path, dst: pathlib.Path, names):
 
 
 def main():
-    tables = ("radar_days.csv", "event_days.csv", "catalogue.csv", "calibration.csv", "rates.csv",
-              "seeders.csv", "by_type.csv", "efficiency.csv")
+    tables = ("summary.json", "radar_days.csv", "event_days.csv", "candidates.csv", "null_days.csv",
+              "catalogue.csv", "calibration.csv", "rates.csv", "slw.csv", "slw_days.csv",
+              "inspection_days.csv", "inspection_flights.csv")
+    physics = ("catalogue_summary{}.json", "seeders{}.csv", "by_type{}.csv", "efficiency{}.csv",
+               "mix{}.csv", "phase{}.csv")
+    tables += tuple(t.format(sfx) for t in physics for sfx in ("", "_p01"))
     print("census:", copy_tables(ROOT / "data" / "census", OUT / "census", tables))
-    print("census_null:", copy_tables(ROOT / "data" / "census_null", OUT / "census_null", tables))
+    print("census_band:", copy_tables(ROOT / "data" / "census_band", OUT / "census_band", tables))
     inj = OUT / "injection"
     inj.mkdir(parents=True, exist_ok=True)
     for name in FINAL_INJECTION:

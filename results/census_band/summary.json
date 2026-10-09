@@ -1,0 +1,92 @@
+{
+ "census": {
+  "event_share": {
+   "n_days": 2888,
+   "pi0": 0.9196675900277008,
+   "share": 0.08033240997229918,
+   "share_lo": 0.04916897506925211,
+   "share_hi": 0.11149584487534625,
+   "n_events_storey": 232.00000000000003,
+   "n_events_storey_lo": 142.00000000000009,
+   "n_events_storey_hi": 322.0,
+   "observed_p01": 64,
+   "expected_p01_null": 28.88,
+   "excess_p01": 35.120000000000005,
+   "excess_p01_lo": 26.0,
+   "excess_p01_hi": 44.0,
+   "observed_p05": 204,
+   "expected_p05_null": 144.4,
+   "excess_p05": 59.599999999999994,
+   "excess_p05_lo": 40.0,
+   "excess_p05_hi": 79.0
+  },
+  "bh_selected": 3,
+  "empirical_null_probit": {
+   "centre": 0.13553778042462258,
+   "width": 0.9482230048312195,
+   "n": 2672
+  },
+  "p_cutoff": 3.448156960104824e-05
+ },
+ "null": {
+  "event_share": {
+   "n_days": 744,
+   "pi0": 1.0,
+   "share": 0.0,
+   "share_lo": 0.0,
+   "share_hi": 0.0,
+   "n_events_storey": 0.0,
+   "n_events_storey_lo": 0.0,
+   "n_events_storey_hi": 0.0,
+   "observed_p01": 7,
+   "expected_p01_null": 7.44,
+   "excess_p01": -0.4400000000000004,
+   "excess_p01_lo": -5.0,
+   "excess_p01_hi": 4.0,
+   "observed_p05": 38,
+   "expected_p05_null": 37.2,
+   "excess_p05": 0.7999999999999972,
+   "excess_p05_lo": -9.0,
+   "excess_p05_hi": 11.0
+  },
+  "bh_selected": 0,
+  "empirical_null_probit": {
+   "centre": 0.048112275787046764,
+   "width": 0.9932378460898564,
+   "n": 601
+  },
+  "selected_at_census_cutoff": 0
+ },
+ "calibrated": {
+  "p01": {
+   "null_rate": 0.010067114093959731,
+   "null_rate_90": [
+    0.004889114413818563,
+    0.016730585184500903
+   ],
+   "null_k": 7,
+   "null_n": 744,
+   "census_k": 64,
+   "census_n": 2888,
+   "expected_false": 29.073825503355703,
+   "excess": 34.92617449664429,
+   "excess_lo": 15.682069987161391,
+   "excess_hi": 49.88023757289199
+  },
+  "p05": {
+   "null_rate": 0.05167785234899329,
+   "null_rate_90": [
+    0.039063626969026516,
+    0.06565988551109178
+   ],
+   "null_k": 38,
+   "null_n": 744,
+   "census_k": 204,
+   "census_n": 2888,
+   "expected_false": 149.24563758389263,
+   "excess": 54.75436241610737,
+   "excess_lo": 14.374250643966946,
+   "excess_hi": 91.18424531345143
+  }
+ }
+}

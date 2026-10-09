@@ -1,0 +1,118 @@
+{
+ "site": "KFTG",
+ "day": "2025-01-25",
+ "n_scans": 210,
+ "n_points": 99898,
+ "n_flights": 1728,
+ "stats": {},
+ "cold_moist": {
+  "pass": true,
+  "hours": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24
+  ],
+  "n_profiles": 25
+ },
+ "echo": {
+  "pass": true,
+  "max_frac": 0.8210258152173913,
+  "n_scans_echo": 176
+ },
+ "max_temp_c": -4.0,
+ "streaks": {
+  "E": 78.67994347563166,
+  "p_day": 0.004975124378109453,
+  "z_day": 3.983116154987429,
+  "p_day_z": 3.400874516136306e-05,
+  "p_day_gamma": 0.0012809457241345081,
+  "n_flights_matched": 56,
+  "E_null_median": 33.91641527908328,
+  "E_null_q95": 53.08407803439465,
+  "n_streaks": 685,
+  "n_matched": 65,
+  "n_rotations": 200,
+  "fdr": [
+   {
+    "threshold": 0.01,
+    "n_real": 16,
+    "expected_false": 3.62,
+    "null_q95": 8.0,
+    "fdr": 0.22625,
+    "excess": 12.379999999999999
+   },
+   {
+    "threshold": 0.02,
+    "n_real": 20,
+    "expected_false": 6.22,
+    "null_q95": 12.0,
+    "fdr": 0.311,
+    "excess": 13.780000000000001
+   },
+   {
+    "threshold": 0.05,
+    "n_real": 29,
+    "expected_false": 10.49,
+    "null_q95": 20.049999999999983,
+    "fdr": 0.3617241379310345,
+    "excess": 18.509999999999998
+   },
+   {
+    "threshold": 0.1,
+    "n_real": 38,
+    "expected_false": 15.69,
+    "null_q95": 26.049999999999983,
+    "fdr": 0.41289473684210526,
+    "excess": 22.310000000000002
+   }
+  ]
+ },
+ "streaks_screen": {
+  "E": 57.90231398784991,
+  "p_day": 0.04,
+  "z_day": 3.4539594051810587,
+  "p_day_z": 0.0002762102615557919,
+  "p_day_gamma": 0.0034460762254692285,
+  "n_flights_matched": 56,
+  "E_null_median": 27.091241145165277,
+  "E_null_q95": 39.53886944807563,
+  "n_streaks": 685,
+  "n_matched": 65,
+  "n_rotations": 24
+ },
+ "streaks_reverse": {
+  "E": 90.70545288194931,
+  "p_day": 0.12,
+  "z_day": 1.5761841441420146,
+  "p_day_z": 0.05749168578488109,
+  "p_day_gamma": 0.068424000972827,
+  "n_flights_matched": 98,
+  "E_null_median": 65.60955404843143,
+  "E_null_q95": 92.49598342873682,
+  "n_streaks": 685,
+  "n_matched": 110
+ },
+ "seconds": 495.7
+}

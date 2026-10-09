@@ -1,8 +1,5 @@
 # Aircraft-made snow: an automated census from open radar and flight data
 
-*Draft. The Denver case study and the method are complete; the multi-airport census and its
-calibration are running, and their sections will be filled in from the results.*
-
 ## Summary
 
 Aircraft climbing or descending through clouds of supercooled droplets can freeze some of
@@ -19,6 +16,17 @@ echoes, match no better than chance. Sixteen flights matched streaks along their
 wind-carried tracks at p <= 0.01, against 3.6 expected by chance; their ice implied fall
 speeds of 0.3-1.3 m/s, as for snow. About one jet in eight that crossed the supercooled
 cloud layer into clear air left a radar-visible streak, nine times the chance rate.
+
+Run without supervision on every winter day at eight radars near large airports (2,888
+tested radar-days, November 2023 to March 2026 plus March 2023), the test found streaks
+beyond chance on 58 days at p <= 0.01 where 29 would be false alarms, a rate measured on 744
+warm days on which no aircraft can make ice (7 false alarms, 7.4 expected). The excess
+comes on days with supercooled cloud over the radar and none on days without it, a
+dependence that was predicted before the last winter was analysed and held there. A
+catalogue of 163 flights on days judged convincing by eye (seven radars, 155 of them jets,
+from regional jets to 747 freighters) shows seeding at a median of 7 300 ft and -13 C, much
+warmer than usually quoted for jets, and arriving jets leaving streaks at about five times
+the odds of departing ones in the same cloud.
 
 ## 1. Background
 
@@ -178,9 +186,10 @@ nothing) even "beats all 200 rotations" is not rare: on 7 July 2025 at Detroit, 
 arrivals matched one rain line along the final approach. Each day is therefore scored by
 the margin z by which its flights beat their rotations, and its p-value is calibrated
 against the same z of every rotation, pooled over all census days of similar chance-match
-level. On the 80 warm null radar-days (July 2025, eight radars, flights below 13 000 ft in
-air above freezing) this calibrated p-value was <= 0.01 on 1 day (0.8 expected) and <= 0.05
-on 2 (4.0 expected).
+level. On 744 warm radar-days where no aircraft can make ice (every day of July and August
+2025 and of July 2024 at the eight radars, flights below 13 000 ft in air above freezing)
+this calibrated p-value was <= 0.01 on 7 days (7.4 expected) and <= 0.05 on 38 (37.2
+expected).
 
 **A corridor-preserving null cannot attribute streaks to aircraft.** Replacing the day's
 flights with other days' flights at the same times of day, which fly the same corridors
@@ -209,15 +218,110 @@ reviewed days in view and checked against the Denver case; they are an aid, not 
 
 ## 6. Census
 
-*To be completed.*
+![Census results](figures/census.png)
+
+**Scope.** Eight radars near large airports (Denver, Minneapolis, Chicago, Indianapolis,
+Detroit, Cleveland, Buffalo, Pittsburgh), every day from November to March of the winters
+2023-24, 2024-25 and 2025-26 plus March 2023: 3,736 radar-days. 848 were screened out
+before testing, 474 with no echo, 366 with no cold, moist layer aloft and 8 with missing
+radar data, which left 2,888 tested. A typical tested day had 915 flights below 30 000 ft
+and 225 radar scans; 1.23 million streak objects were tested in all. Days whose 24-rotation
+screen reached p <= 0.05 (355) were confirmed with 200 rotations. Nobody looked at any day
+before its score was computed.
+
+**How often.** If aircraft never made snow, 1% of tested days would reach a calibrated
+p <= 0.01: 28.9 days. 58 did, an excess of 29 (90% interval 20-38). At p <= 0.05, 202 days
+against 144.4 expected. Re-scored without streaks in families of parallel bands, the
+census gives 64 and 204. The excess is not spread evenly: Chicago (15 days against 3.8
+expected), Detroit (11 against 3.8) and Minneapolis (9 against 3.0) carry most of it;
+Buffalo's 8 against 4.1 are mostly lake-effect band days that do not survive inspection,
+and Cleveland, Indianapolis and Pittsburgh are at chance. By winter, 2023-24 shows no excess
+(9 against 8.5), 2024-25 21 against 9.5 and 2025-26 27 against 9.5. In the main score no
+single day reaches the bar a 5% false discovery rate over 2,888 days requires (section 5: a
+day has only some 15-25 independent rotations); in the band-filtered score three do (below).
+So the census establishes how often streaks occur, and the catalogue below which flights
+made them, by different means.
+
+**Supercooled cloud.** Aircraft can only make ice in cloud of supercooled droplets, and an
+artefact of the method has no reason to care whether any is present. Split by the hours of
+HRRR supercooled cloud water over the radar, days at p <= 0.05 are 3.4% with none (24 of
+716), 7.9% with 1-3 hours (60 of 755), 6.1% with 4-8 hours (40 of 659) and 10.3% with 9-24
+hours (78 of 758). After the first two winters showed this, a prediction about the colder
+part of that covariate was written down before winter 2025-26 was analysed
+(`docs/methods.md`): days without supercooled cloud at -10 C or colder would show no
+excess, days with 4 or more hours of it would, and their share at p <= 0.05 would be the
+larger. All three held: 23 of 398 days against 19.9 expected (no excess), 20 of 197 against
+9.9 (one-sided Poisson p = 0.003), shares 5.8% against 10.2%.
+
+**False alarms on warm days.** The 1% above is what a calibrated test should give; whether
+this one does was measured. The same pipeline was run on every day of July and August 2025
+and of July 2024 at the eight radars (744 radar-days), using only flight segments below
+13 000 ft in air the HRRR puts above freezing, where no aircraft can make ice but traffic,
+rain, insects and clutter are all present. The calibrated p-value was <= 0.01 on 7 of those
+days (7.4 expected) and <= 0.05 on 38 (37.2 expected): the false-alarm rate is what it
+claims to be. Measured against this rate instead of assumed, the winter excess at
+p <= 0.01 is 29 days (90% interval 10-44) and at p <= 0.05 53 days (12-89); for the
+band-filtered score, 35 (16-50) and 55 (14-91). The warm days' lowest p-value was 0.0009.
+Three winter days in the band-filtered census have p = 0.00003, the smallest the
+calibration can give, and pass a 5% false discovery rate on their own (q = 0.03): Chicago on
+25 January and 2 February 2026 and Minneapolis on 14 February 2025. All three were judged
+convincing by eye.
+
+**What the streaks look like.** Every day at calibrated p <= 0.01 in either score (67) and
+every day at p <= 0.05 with a flight the objective rules call convincing (34 more) was
+reviewed by eye on a sheet of its eight best matches: 41 looked like aircraft streaks
+(thin, in clear or light echo, along the drifted track, often growing over scans or tracing
+the turn of an approach), 20 were ambiguous and 40 doubtful, mostly pieces of snow bands
+lined up with the runways in use (`results/census/visual_review.csv`, with a note for each;
+it also holds five days looked at during development, none convincing).
+
+![Nine catalogue streaks](figures/census_gallery.png)
+
+*Nine catalogue flights at six radars over three winters. Orange: the air each aircraft
+flew through, carried by the HRRR wind to the scan time; dashed: its track over the previous
+hour. Panel titles give the seeding altitude and temperature and the time since passage.*
+
+**The catalogue.** On the 41 convincing radar-days, 316 flights matched a streak at
+p <= 0.01, against 76 expected by chance from the rotations. Dropping those the objective
+rules call doubtful (streak in widespread echo, among parallel bands, implausible fall speed
+or seeding at 16 000 ft or above) leaves 163 flights on 35 radar-days (30 dates) at seven
+radars: 16 in 2023-24, 99 in 2024-25 and 48 in 2025-26 (`data/census/seeders.csv`). They
+are 155 jets, 4 turboprops, 3 piston aircraft and one of unknown type, much like the traffic
+that crossed the seeding layer (96% jets). The commonest types are the 737-800 (19), CRJ-900
+(14), E175 (13), CRJ-700 (12) and 737 MAX 8 (11); 24 are widebodies, from a 777-300ER to
+MD-11 and 747-8 freighters. 114 were arriving, 48 departing and one in level flight.
+They crossed the cloud at a median 7 300 ft (interquartile range 5 600-9 700 ft) and -13 C
+(-17 to -11 C), and their ice implied fall speeds of 0.25-1.55 m/s (median 0.60). The
+streaks were seen a median 33 minutes after passage, were 8-36 km long (median 13.5) and
+about 2.3 km wide, and peaked at a median 1.0 mm/h of snow (water equivalent; at most 5).
+
+**Arrivals, departures and temperature.** On catalogue days, 16.4% of jet arrivals that
+entered echo-free air in the seeding layer left a streak along their drifted track (968 of
+5,913), against 2.3% for the same flights rotated about the radar; for departures it was
+2.5% (162 of 6,389) against 1.1%. Arrivals spend about twice as long in the layer, but a
+Mantel-Haenszel odds ratio stratified by time in the layer, temperature and day still puts
+them at 5.2 times the odds of departures (90% interval 4.1-6.5). What remains mixes aircraft
+configuration (gear and flaps out, high lift at low speed) with airspeed, which this census
+cannot separate. By temperature, arriving jets left streaks most often at -8 to -11 C
+(25.6%, against 1.4% by chance), less often colder (12-18% below -11 C) and still well above
+chance at -4 to -8 C (7.5% against 0.4%). Catalogue jets seeded at a median of -13 C, much
+warmer than the -20 to -25 C often quoted for jets (`docs/background.md`). Days were selected
+for having streaks, so these shares overstate the rate on an ordinary day; the comparisons
+within them are the result. HRRR temperatures at the aircraft carry an error of 1-2 C.
+
+**Without the visual review.** Taking every day at p <= 0.01 as a catalogue day instead
+(no human judgement) gives 451 flights matched at p <= 0.01 against 89.5 by chance, and 213
+catalogue flights on 47 radar-days at all eight radars, with the same picture: a median
+seeding temperature of -13 C, 152 arrivals to 60 departures, fall speeds of 0.25-1.56 m/s.
+The visual review changes which days are shown, not what they show.
 
 ## 7. Limitations
 
 - **The chance model can be fooled.** Rotating flights about the radar breaks every link
   between where aircraft fly and where echo forms, including links that are not seeding
-  (routing around storms, convergence lines near airports). On one warm day this produced
-  a false alarm at p = 0.01. The census's false-alarm rate is measured on warm days at
-  every radar, not assumed.
+  (routing around storms, convergence lines near airports). On warm days such links give
+  false alarms (7 of 744 at p <= 0.01, as many as a calibrated test should), so the
+  census's false-alarm rate is measured on warm days at every radar, not assumed.
 - **Corridors cannot be separated from aircraft by any placebo that keeps them.** Other
   days' flights fly the same procedures at the same minutes, so they fit real aircraft
   streaks almost as well as the aircraft that made them. Evidence that a streak is

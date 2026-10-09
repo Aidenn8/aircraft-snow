@@ -1,0 +1,8 @@
+{
+ "days": 58,
+ "flights_p01_all": 451.0,
+ "expected_false_p01": 89.53000000000002,
+ "catalogue_flights": 213,
+ "catalogue_days": 47,
+ "catalogue_radars": 8
+}
