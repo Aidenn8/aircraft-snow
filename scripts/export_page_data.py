@@ -108,6 +108,18 @@ def census_block(cen: pathlib.Path, band: pathlib.Path) -> dict:
         k = json.loads(cs.read_text())
         C["catalogue"] = {"flights": k["catalogue_flights"], "days": k["catalogue_days"], "radars": k["catalogue_radars"],
                           "flights_p01_all": k["flights_p01_all"], "expected_false_p01": k["expected_false_p01"]}
+    sj = cen / "summary.json"
+    if sj.exists():
+        q = json.loads(sj.read_text())
+        nu, cal = q["null"]["event_share"], q["calibrated"]["p01"]
+        C["null_note"] = (f"Is 1% the right false-alarm rate? The same detector was run on {nu['n_days']} summer "
+                          f"radar-days at the same eight radars, using only flights in air above freezing, where "
+                          f"no aircraft can make ice but traffic, rain, insects and clutter are all there. "
+                          f"{nu['observed_p01']} of those days reached p&nbsp;&le;&nbsp;0.01, against "
+                          f"{nu['expected_p01_null']:.1f} expected: the test's false-alarm rate is what it "
+                          f"claims. Against that measured rate, the winters have <strong>{cal['excess']:.0f}</strong> "
+                          f"more such days than chance (90% interval {cal['excess_lo']:.0f}&ndash;"
+                          f"{cal['excess_hi']:.0f}).")
     b = rates[(rates.score == "band-filtered") & (rates.site == "all") & (rates.winter == "all")]
     if len(b):
         b = b.iloc[0]

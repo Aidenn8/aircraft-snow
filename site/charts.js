@@ -249,12 +249,14 @@
     const W = chartW(box), H = 300, m = { l: 56, r: 16, t: 14, b: 44 };
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
       "aria-label": "Share of jets crossing the layer that left a streak, by temperature, for arrivals and departures" }, box);
-    const x0 = -4, x1 = -20;
+    // the axis runs to just past the coldest bin's midpoint (the coldest bin is -30 to -20 C)
+    const x0 = -4, x1 = Math.min(-20, ...E.map((r) => mid(r.tbin))) - 1.5;
     const y1 = Math.max(0.2, ...E.map((r) => r.hi90)) * 1.08;
     const xs = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
     const ys = (v) => m.t + (y1 - v) / y1 * (H - m.t - m.b);
     const ticks = []; for (let t = 0; t <= y1 + 1e-9; t += 0.05) ticks.push(t);
-    frame(svg, W, H, m, xs, ys, [-4, -8, -12, -16, -20], ticks, "air temperature where the aircraft crossed the layer (°C)",
+    const xticks = []; for (let t = -4; t >= x1; t -= 4) xticks.push(t);
+    frame(svg, W, H, m, xs, ys, xticks, ticks, "air temperature where the aircraft crossed the layer (°C)",
           "share that left a streak", (t) => minus(t), (t) => `${Math.round(t * 100)}%`);
     const series = [["arrival", css("--accent-ink"), -0.18], ["departure", css("--seed"), 0.18]];
     for (const [ph, col, dx] of series) {
@@ -349,6 +351,7 @@
     set("c-cat-radars", K.radars);
     set("c-cat-false", fmt(K.expected_false_p01, 0));
     const note = (id, html) => { const e = document.getElementById(id); if (e && html) e.innerHTML = html; };
+    note("c-null-note", C.null_note);
     note("c-band-note", C.band_note);
     note("c-phase-note", C.phase_note);
   }
