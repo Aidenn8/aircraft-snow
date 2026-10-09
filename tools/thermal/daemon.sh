@@ -6,8 +6,9 @@
 # appends a line to ./thermal.log. Heavy jobs are started through guarded_run.py,
 # which registers their process group in ./pgids/; this daemon then enforces the
 # verdict on them directly:
-#   PAUSE (serious, or battery >= 40 C): SIGSTOP the job (frozen, no CPU use)
-#   resume (fair or better and battery < 38 C): SIGCONT
+#   PAUSE (serious, battery >= 40 C, on battery power, or lid closed): SIGSTOP the job
+#         (frozen, no CPU use)
+#   resume (fair or better, battery < 38 C, on AC, lid open): SIGCONT
 #   STOP  (critical, or battery >= 45 C): SIGTERM the job and leave state=STOP
 # STOP is sticky: nothing restarts until someone deletes ./state.
 #
@@ -29,12 +30,14 @@ while true; do
   batt=$(awk -v r="${raw:-0}" 'BEGIN {printf "%.1f", r/100}')
   load=$(sysctl -n vm.loadavg | awk '{print $2}')
   ac=$(ioreg -rn AppleSmartBattery | awk '/"ExternalConnected" =/ {print $3; exit}')
+  lid=$(ioreg -r -k AppleClamshellState -d 4 | awk '/"AppleClamshellState"/ {print $NF; exit}')
 
   prev="$verdict"
   if [ "$verdict" != "STOP" ]; then
     if [ "$therm" -ge 3 ] || awk -v b="$batt" -v s="$STOP_C" 'BEGIN{exit !(b>=s)}'; then
       verdict="STOP"
-    elif [ "$therm" -ge 2 ] || awk -v b="$batt" -v p="$PAUSE_C" 'BEGIN{exit !(b>=p)}'; then
+    elif [ "$therm" -ge 2 ] || [ "$ac" != "Yes" ] || [ "$lid" = "Yes" ] ||
+         awk -v b="$batt" -v p="$PAUSE_C" 'BEGIN{exit !(b>=p)}'; then
       verdict="PAUSE"
     elif [ "$verdict" = "PAUSE" ]; then
       if [ "$therm" -le 1 ] && awk -v b="$batt" -v r="$RESUME_C" 'BEGIN{exit !(b<r)}'; then
@@ -45,9 +48,9 @@ while true; do
     fi
   fi
 
-  echo "$verdict therm=$therm batt=${batt}C load=$load ac=$ac at $ts" > "$STATE_FILE"
-  echo "$ts verdict=$verdict therm=$therm batt=${batt}C load1=$load ac=$ac" >> "$LOG"
-  [ "$prev" != "$verdict" ] && echo "$ts TRANSITION $prev -> $verdict (therm=$therm batt=${batt}C)" >> "$LOG"
+  echo "$verdict therm=$therm batt=${batt}C load=$load ac=$ac lid_closed=$lid at $ts" > "$STATE_FILE"
+  echo "$ts verdict=$verdict therm=$therm batt=${batt}C load1=$load ac=$ac lid_closed=$lid" >> "$LOG"
+  [ "$prev" != "$verdict" ] && echo "$ts TRANSITION $prev -> $verdict (therm=$therm batt=${batt}C ac=$ac lid_closed=$lid)" >> "$LOG"
 
   for f in "$DIR"/pgids/*; do
     [ -e "$f" ] || continue
