@@ -97,9 +97,9 @@ def main():
     ax.plot([], [], "o", mfc=figstyle.SURFACE, mec=figstyle.INK_2, ms=5, ls="none", label="chance (rotated tracks)")
     ax.set_xlabel("temperature where the aircraft crossed the layer (°C, HRRR)")
     ax.set_ylabel("first passages that left a streak (%)")
-    ax.set_title("(c) Arrivals seed more often, and down to about −8 °C", fontsize=10.5)
+    ax.set_title("(c) Arrivals leave streaks far more often than departures", fontsize=10.5)
     ax.invert_xaxis()
-    ax.legend(loc="upper left")
+    ax.legend(loc="upper right")
 
     # (d) seeding temperatures against the quoted thresholds
     ax = axes[1, 1]
