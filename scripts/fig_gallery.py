@@ -1,6 +1,6 @@
 """Gallery of census cases: one panel per aircraft streak, from different radars and days.
 
-usage: fig_gallery.py CASES.csv --out FIG.png [--cols 3] [--alpha 0.05] [--title TEXT]
+usage: fig_gallery.py CASES.csv --out FIG.png [--cols 3] [--alpha 0.05] [--title TEXT] [--dark]
 
 CASES.csv has columns site, day (YYYY-MM-DD, the 12 UTC radar-day), time (HH:MM UTC, the
 scan to show) and callsign, and optionally half_km (panel half-width, default 22). Each
@@ -48,8 +48,9 @@ def main():
     ap.add_argument("--cols", type=int, default=3)
     ap.add_argument("--alpha", type=float, default=0.05)
     ap.add_argument("--title", default="")
+    ap.add_argument("--dark", action="store_true", help="black background and Inter, for the web page")
     a = ap.parse_args()
-    figstyle.apply()
+    figstyle.apply(dark=a.dark)
     cases = pd.read_csv(a.cases, dtype={"time": str})
     names = site_names()
     n = len(cases)

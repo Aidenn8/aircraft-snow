@@ -1,161 +1,245 @@
 <title>Aircraft-Made Snow</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: an approach-chart page. A narrow reading column, with the radar replay as the one
-   framed instrument; thin rules and condensed labels, monospace for what aviation writes in code. */
+/* Research page on a pitch-black ground: white Inter text, a large plain title, a quiet grey
+   navigation line, and rows with a narrow label column on the left and the content on the
+   right, separated by thin rules. Code, controls and buttons use IBM Plex Mono. Charts and the
+   radar replay are drawn on the same black. The page is dark in every colour scheme by design. */
 :root {
-  --bg: #f6f8fa;            /* paper, faintly cool */
-  --panel: #ffffff;
-  --ink: #0f1a24;
-  --ink-2: #44515d;
-  --muted: #7a8794;
-  --rule: #d9e0e6;
-  --seed: #e5612a;          /* seeding aircraft (same orange as the figures) */
-  --seed-path: #f0a582;
-  --traffic: #8a96a1;
-  --radar-bg: #fbfcfd;
-  --accent-ink: #1c5cab;    /* radar blue, for links and numbers */
-  /* reflectivity ramp, one hue: weak echo light, strong echo dark on the light page */
-  --r1: #cde2fb; --r2: #86b6ef; --r3: #3987e5; --r4: #1c5cab; --r5: #0d366b;
-  --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
-  --font-ui: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
-  --step-0: 1rem; --step-1: 1.25rem; --step-2: 1.6rem; --step-3: 2.4rem; --step-4: 3.4rem;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0d141b; --panel: #121c25; --ink: #e9eef2; --ink-2: #b4c0ca; --muted: #7f8c97;
-    --rule: #24323e; --seed: #f07440; --seed-path: #9a5235; --traffic: #6f7d89;
-    --radar-bg: #101a22; --accent-ink: #86b6ef; color-scheme: dark;
-    --r1: #17345a; --r2: #1f5aa3; --r3: #3987e5; --r4: #86b6ef; --r5: #e4effc;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0d141b; --panel: #121c25; --ink: #e9eef2; --ink-2: #b4c0ca; --muted: #7f8c97;
-  --rule: #24323e; --seed: #f07440; --seed-path: #9a5235; --traffic: #6f7d89;
-  --radar-bg: #101a22; --accent-ink: #86b6ef; color-scheme: dark;
+  --bg: #000000; --panel: #000000; --soft: #101010;
+  --ink: #ffffff; --ink-2: #d4d4d4; --muted: #8e8e8e; --faint: #5e5e5e;
+  --rule: #2a2a2a; --rule-strong: #474747;
+  --seed: #eb6834;          /* seeding aircraft, the same orange as the figures */
+  --seed-path: #9a5235; --traffic: #6c6c6c; --radar-bg: #050505;
+  --accent-ink: #56b4e9;    /* radar blue for data marks */
+  /* reflectivity ramp: weak echo dark, strong echo bright, on the black page */
   --r1: #17345a; --r2: #1f5aa3; --r3: #3987e5; --r4: #86b6ef; --r5: #e4effc;
+  --sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --font-ui: var(--sans); --font-display: var(--sans); --font-mono: var(--mono);
+  --max: 1240px; --lab: 240px; --gap: 56px; --measure: 760px;
+  color-scheme: dark;
 }
-body { background: var(--bg); color: var(--ink); font: 400 var(--step-0)/1.6 var(--font-ui); }
-.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
-a { color: var(--accent-ink); }
-h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.01em; text-wrap: balance; margin: 0; }
-h1 { font-size: var(--step-4); line-height: 1.02; }
-h2 { font-size: var(--step-3); line-height: 1.1; }
-h3 { font-size: var(--step-2); line-height: 1.15; }
-p { margin: 0; max-width: 66ch; }
-.eyebrow { font: 500 0.78rem/1.2 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.mono { font-family: var(--font-mono); font-size: 0.92em; }
-section { display: grid; gap: 18px; padding-block: 44px; border-top: 1px solid var(--rule); }
-header.hero { display: grid; gap: 18px; padding-block: 8px 32px; }
-.lede { font-size: var(--step-1); line-height: 1.5; color: var(--ink-2); max-width: 60ch; }
-.replay-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
-@media (max-width: 860px) { .replay-grid { grid-template-columns: minmax(0, 1fr); } }
-.instrument { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; display: grid; gap: 10px; }
-#replay { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: 3px; image-rendering: pixelated; }
-.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.controls button { font: 600 0.9rem var(--font-ui); background: var(--ink); color: var(--panel); border: 0; border-radius: 4px; padding: 7px 16px; cursor: pointer; }
-.controls button:focus-visible, .seeders li:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
-.controls input[type=range] { flex: 1 1 200px; accent-color: var(--seed); min-width: 0; }
-#replay-clock { font: 500 0.95rem var(--font-mono); color: var(--ink); font-variant-numeric: tabular-nums; min-width: 17ch; }
-.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.82rem; color: var(--ink-2); align-items: center; }
-.key { display: inline-flex; align-items: center; gap: 7px; }
-.key i { display: inline-block; width: 22px; height: 3px; border-radius: 2px; background: var(--seed); }
-.key i.traffic { height: 1px; background: var(--traffic); }
-.key i.path { background: var(--seed-path); height: 2px; }
-.ramp { width: 120px; height: 9px; border-radius: 2px; background: linear-gradient(90deg, var(--r1), var(--r2), var(--r3), var(--r4), var(--r5)); }
-.side { display: grid; gap: 12px; min-width: 0; }
-.side p { font-size: 0.92rem; color: var(--ink-2); }
-.seeders { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 640px; overflow-y: auto; }
-.seeders li { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; padding: 8px 10px; border-radius: 4px; cursor: pointer; border-left: 3px solid transparent; }
-.seeders li:hover { background: var(--bg); }
-.seeders li.is-active { border-left-color: var(--seed); }
-.seeders .cs { font: 500 0.95rem var(--font-mono); }
-.seeders .ty { font: 500 0.95rem var(--font-mono); color: var(--muted); }
-.seeders .meta { grid-column: 1 / -1; font-size: 0.8rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.note { font-size: 0.85rem; color: var(--muted); }
-.two-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
-@media (max-width: 860px) { .two-col { grid-template-columns: minmax(0, 1fr); } }
-.prose { display: grid; gap: 14px; }
-.prose p { color: var(--ink-2); }
-.prose strong { color: var(--ink); font-weight: 600; }
-.stat-row { display: flex; flex-wrap: wrap; gap: 28px; }
-.stat { display: grid; gap: 2px; align-content: start; }
-.stat b { font: 600 var(--step-3)/1 var(--font-display); color: var(--ink); font-variant-numeric: tabular-nums; }
-.stat > span { font-size: 0.85rem; color: var(--muted); max-width: 22ch; }
-.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); }
-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-th, td { padding: 8px 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--rule); }
-th { font: 500 0.75rem/1.2 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
-tbody tr:last-child td { border-bottom: 0; }
-td .num { font-variant-numeric: tabular-nums; }
-td:nth-child(n+4), th:nth-child(n+4) { text-align: right; }
-.chart { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; }
-.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
-.chart .tick { font: 400 11px var(--font-ui); fill: var(--ink-2); }
-.chart .axis-label { font: 400 12px var(--font-ui); fill: var(--ink-2); }
-.chart .note-text { font: 400 11px var(--font-ui); fill: var(--muted); }
-.table-wrap.scroll { max-height: 560px; overflow: auto; }
-.table-wrap.scroll thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
-.catalogue th, .catalogue td { padding: 7px 10px; text-align: left; }
-.catalogue td:nth-child(n+6), .catalogue th:nth-child(n+6) { text-align: right; }
-.sub { font: 600 var(--step-1)/1.3 var(--font-display); margin: 36px 0 12px; color: var(--ink); }
-.gallery img { width: 100%; height: auto; display: block; border-radius: 4px; background: #fcfcfb; }
-.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--ink-2); margin-top: 8px; }
-.chart-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
-.chart-legend .sw.fill { background: var(--seed); }
-.chart-legend .sw.ring { border: 1.5px solid var(--muted); }
-.chart-legend .sw.band { border-radius: 2px; width: 18px; height: 8px; background: var(--seed); opacity: 0.3; }
-.tip { position: fixed; z-index: 10; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--rule);
-       border-radius: 4px; padding: 7px 10px; font-size: 0.82rem; line-height: 1.45; box-shadow: 0 2px 10px rgba(0,0,0,0.12); max-width: 260px; }
-.tip .muted { color: var(--muted); }
-footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-size: 0.85rem; color: var(--muted); display: grid; gap: 6px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark } }
+:root[data-theme="dark"] { color-scheme: dark }
+
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html { -webkit-text-size-adjust: 100% }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.62 var(--sans); margin: 0; padding: 40px 32px 88px;
+  font-optical-sizing: auto; letter-spacing: -0.003em; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale }
+.page { max-width: var(--max); margin: 0 auto }
+a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--faint); text-decoration-thickness: 1px; text-underline-offset: 3px }
+a:hover { text-decoration-color: var(--ink) }
+a:focus-visible, button:focus-visible, input:focus-visible, .seeders li:focus-visible, [tabindex]:focus-visible { outline: 2px solid #fff; outline-offset: 3px }
+p { margin: 0 0 16px }
+ul, ol { padding-left: 1.25em; margin: 0 0 16px }
+li { margin-bottom: 8px }
+b, strong { font-weight: 500 }
+em { font-style: italic }
+.mono { font-family: var(--mono); font-size: 0.9em }
+
+/* ---- navigation line */
+nav.top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 24px;
+  font-size: 14.5px; margin-bottom: 56px }
+nav.top .brand { color: var(--ink2, var(--ink-2)); text-decoration: none }
+nav.top .links { display: flex; flex-wrap: wrap; gap: 4px 22px }
+nav.top .links a { color: var(--muted); text-decoration: none }
+nav.top .links a:hover { color: var(--ink) }
+
+/* ---- title block */
+.titleblock { padding-bottom: 36px }
+.eyebrow { font: 400 13px/1.4 var(--mono); color: var(--muted); margin: 0 0 22px; letter-spacing: 0 }
+h1 { font: 500 clamp(2.1rem, 4.3vw, 3.45rem)/1.08 var(--sans); letter-spacing: -0.032em; margin: 0 0 20px; max-width: 1020px; text-wrap: balance }
+.subtitle { font: 400 clamp(1.15rem, 1.9vw, 1.4rem)/1.4 var(--sans); letter-spacing: -0.012em; color: var(--ink-2); margin: 0 0 14px; max-width: 900px; text-wrap: balance }
+.meta { color: var(--muted); font-size: 15px; margin: 0 }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px }
+.cbtn { display: inline-flex; align-items: center; gap: 9px; font: 500 13px/1 var(--mono); color: var(--ink); background: var(--soft);
+  border: 1px solid var(--rule-strong); border-radius: 6px; padding: 10px 13px; text-decoration: none; white-space: nowrap; cursor: pointer }
+.cbtn:hover { border-color: var(--ink); background: #171717 }
+.cbtn .arr { color: var(--muted) }
+.cbtn:hover .arr { color: var(--ink) }
+
+/* ---- rows: label column + content */
+.row { display: grid; grid-template-columns: var(--lab) minmax(0, 1fr); column-gap: var(--gap); border-top: 1px solid var(--rule); padding: 48px 0 32px }
+.lab h2 { font: 400 16px/1.4 var(--sans); margin: 0; letter-spacing: 0; color: var(--ink) }
+.lab .no { display: block; color: var(--muted); font-size: 15px; margin-top: 12px }
+.body { min-width: 0 }
+.body > p, .body > ul, .body > h3, .body > h4, .prose { max-width: var(--measure) }
+.overview .body > p { font-size: 19px; line-height: 1.6; letter-spacing: -0.01em; color: var(--ink) }
+h3 { font: 400 22px/1.3 var(--sans); letter-spacing: -0.015em; margin: 40px 0 12px; text-wrap: balance }
+h4 { font: 500 16px/1.4 var(--sans); margin: 36px 0 10px }
+.body > h3:first-child, .body > h4:first-child { margin-top: 0 }
+.lede { color: var(--ink-2) }
+.note { font-size: 15px; line-height: 1.55; color: var(--muted); max-width: var(--measure) }
+.prose p { color: var(--ink-2) }
+.prose strong { color: var(--ink) }
+
+/* ---- stats */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px 28px; margin: 28px 0 34px; padding-top: 24px;
+  border-top: 1px solid var(--rule) }
+.stats.three { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+.stat b { display: block; font: 400 30px/1.1 var(--sans); letter-spacing: -0.025em; color: var(--ink); font-variant-numeric: tabular-nums }
+.stat > span { display: block; margin: 10px 0 0; font-size: 14px; line-height: 1.45; color: var(--muted) }
+
+/* ---- radar replay */
+.replay-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 32px; align-items: start; margin-top: 8px }
+.instrument { display: grid; gap: 12px }
+#replay { width: 100%; aspect-ratio: 1 / 1; display: block; border: 1px solid var(--rule); image-rendering: pixelated; background: var(--radar-bg) }
+.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap }
+.controls button { font: 500 13px/1 var(--mono); color: var(--ink); background: var(--soft); border: 1px solid var(--rule-strong);
+  border-radius: 6px; padding: 9px 14px; cursor: pointer; min-width: 64px }
+.controls button:hover { border-color: var(--ink) }
+.controls input[type=range] { flex: 1 1 200px; accent-color: var(--seed); min-width: 0 }
+#replay-clock { font: 400 13.5px var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 17ch }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13.5px; color: var(--muted); align-items: center }
+.key { display: inline-flex; align-items: center; gap: 8px }
+.key i { display: inline-block; width: 22px; height: 3px; border-radius: 2px; background: var(--seed) }
+.key i.traffic { height: 1px; background: var(--traffic) }
+.key i.path { background: var(--seed-path); height: 2px }
+.ramp { width: 110px; height: 8px; border-radius: 2px; background: linear-gradient(90deg, var(--r1), var(--r2), var(--r3), var(--r4), var(--r5)) }
+.side { min-width: 0 }
+.side .eyebrow { margin-bottom: 12px }
+.side p { font-size: 14.5px; line-height: 1.55; color: var(--muted) }
+.seeders { list-style: none; margin: 0 0 14px; padding: 0; max-height: 600px; overflow-y: auto; border-top: 1px solid var(--rule) }
+.seeders li { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; padding: 8px 10px; margin: 0; cursor: pointer;
+  border-bottom: 1px solid var(--rule); border-left: 2px solid transparent }
+.seeders li:hover { background: var(--soft) }
+.seeders li.is-active { border-left-color: var(--seed) }
+.seeders .cs { font: 500 13.5px var(--mono) }
+.seeders .ty { font: 400 13.5px var(--mono); color: var(--muted) }
+.seeders .meta { grid-column: 1 / -1; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums }
+
+/* ---- charts */
+.two-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; margin: 8px 0 28px }
+figure { margin: 0 }
+figure.chart svg { width: 100%; height: auto; display: block; overflow: visible }
+.chart .tick { font: 400 11.5px var(--sans); fill: var(--muted) }
+.chart .axis-label { font: 400 12.5px var(--sans); fill: var(--ink-2) }
+.chart .note-text { font: 400 11.5px var(--sans); fill: var(--muted) }
+figcaption { font-size: 15px; line-height: 1.55; color: var(--muted); margin-top: 12px; max-width: var(--measure) }
+figcaption b { color: var(--ink); font-weight: 500 }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; color: var(--ink-2); margin-top: 10px }
+.chart-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px }
+.chart-legend .sw.fill { background: var(--seed) }
+.chart-legend .sw.ring { border: 1.5px solid var(--muted) }
+.chart-legend .sw.band { border-radius: 2px; width: 18px; height: 8px; background: var(--seed); opacity: 0.35 }
+.gallery { margin: 12px 0 34px }
+.gallery img { width: 100%; height: auto; display: block; background: #000 }
+.tip { position: fixed; z-index: 10; pointer-events: none; background: #111; color: var(--ink); border: 1px solid var(--rule-strong);
+  border-radius: 6px; padding: 8px 11px; font-size: 13px; line-height: 1.45; max-width: 260px }
+.tip .muted { color: var(--muted) }
+
+/* ---- tables */
+.tbl { margin: 20px 0 14px; overflow-x: auto; -webkit-overflow-scrolling: touch }
+.tbl.scroll { max-height: 560px; overflow: auto }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.45; font-variant-numeric: tabular-nums;
+  border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule-strong) }
+th { font-weight: 400; font-size: 13px; color: var(--muted); text-align: left; padding: 10px 14px 8px 0; border-bottom: 1px solid var(--rule);
+  vertical-align: bottom; white-space: nowrap }
+td { padding: 7px 14px 7px 0; vertical-align: top; color: var(--ink); white-space: nowrap }
+td:last-child, th:last-child { padding-right: 0 }
+tbody tr:first-child td { padding-top: 10px }
+tbody tr:last-child td { padding-bottom: 10px }
+td:nth-child(n+4), th:nth-child(n+4) { text-align: right }
+.catalogue td:nth-child(-n+5), .catalogue th:nth-child(-n+5) { text-align: left }
+.catalogue td:nth-child(n+6), .catalogue th:nth-child(n+6) { text-align: right }
+.tbl.scroll thead th { position: sticky; top: 0; background: var(--bg); z-index: 1 }
+
+/* ---- colophon */
+.colophon { border-top: 1px solid var(--rule); padding-top: 24px; margin-top: 8px; font-size: 14px; line-height: 1.6; color: var(--muted);
+  display: grid; grid-template-columns: var(--lab) minmax(0, 1fr); column-gap: var(--gap) }
+.colophon p { margin: 0 0 6px; max-width: var(--measure) }
+.colophon a { color: var(--muted) }
+.colophon a:hover { color: var(--ink) }
+
+/* ---- narrow screens */
+@media (max-width: 960px) {
+  body { padding: 32px 20px 64px }
+  nav.top { margin-bottom: 40px }
+  .row, .colophon { grid-template-columns: minmax(0, 1fr); padding-top: 34px }
+  .lab { display: flex; align-items: baseline; gap: 14px; margin-bottom: 18px }
+  .lab .no { margin-top: 0 }
+  .stats, .stats.three { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .replay-grid, .two-col { grid-template-columns: minmax(0, 1fr) }
+}
+@media (max-width: 640px) {
+  body { padding: 24px 16px 56px; font-size: 16.5px }
+  .overview .body > p { font-size: 17.5px }
+  .stat b { font-size: 25px }
+}
 </style>
 
-<div class="wrap">
-  <header class="hero">
-    <div class="eyebrow">KFTG radar · Denver International · 25 January 2025</div>
-    <h1>Aircraft-made snow</h1>
-    <p class="lede">On a cold January afternoon and evening near Denver, airliners climbing and
-      descending through a thin supercooled cloud froze some of its droplets. The ice fell out
-      as narrow bands of snow that traced their flight paths on weather radar. {{HERO_SUMMARY}}</p>
-  </header>
+<div class="page">
+<nav class="top"><a class="brand" href="#">Aircraft-made snow</a><div class="links">
+  <a href="https://github.com/Aidenn8/aircraft-snow/blob/research/REPORT.md">Report</a>
+  <a href="https://github.com/Aidenn8/aircraft-snow/blob/research/docs/methods.md">Methods</a>
+  <a href="https://github.com/Aidenn8/aircraft-snow">Code</a></div></nav>
 
-  <div class="replay-grid">
-    <div class="instrument">
-      <canvas id="replay" role="img" aria-label="Animated radar reflectivity near Denver with the tracks of aircraft and the drifted air of the aircraft matched to snow streaks"></canvas>
-      <div class="controls">
-        <button id="replay-play" type="button" aria-pressed="false">Play</button>
-        <input id="replay-time" type="range" min="0" max="1" value="0" aria-label="Radar scan time">
-        <span id="replay-clock"></span>
-      </div>
-      <div class="legend">
-        <span class="key"><span class="ramp" aria-hidden="true"></span> snow echo 0–35 dBZ</span>
-        <span class="key"><i aria-hidden="true"></i> air a seeding aircraft flew through, carried by the wind</span>
-        <span class="key"><i class="path" aria-hidden="true"></i> where it actually flew</span>
-        <span class="key"><i class="traffic" aria-hidden="true"></i> other traffic, last 30 min</span>
-      </div>
-    </div>
-    <aside class="side">
-      <div class="eyebrow">Matched aircraft</div>
-      <p>Each was matched to a streak at p &le; 0.01 against 200 rotated copies of all the
-        day's flights. Hover to highlight its air; select to jump to the match.</p>
-      <ul class="seeders" id="replay-seeders"></ul>
-      <p class="note">Times are when the aircraft passed through the cloud layer; temperatures are
-        the HRRR analysis at its altitude.</p>
-    </aside>
+<header class="titleblock">
+  <p class="eyebrow">NEXRAD radar · ADS-B flight tracks · eight US airports · winters 2023–2026</p>
+  <h1>Aircraft-made snow: an automated census from open radar and flight data</h1>
+  <p class="subtitle">Airliners climbing and descending through supercooled cloud freeze some of its droplets, and the
+    ice falls out as thin streaks of snow on weather radar. This project finds those streaks automatically, matches
+    each to the aircraft that made it, and counts how often it happens.</p>
+  <p class="meta">Aiden Huang · October 2026</p>
+  <div class="actions">
+    <a class="cbtn" href="https://github.com/Aidenn8/aircraft-snow/blob/research/REPORT.md">full report<span class="arr">↗</span></a>
+    <a class="cbtn" href="https://github.com/Aidenn8/aircraft-snow/tree/research/results/census">catalogue and tables<span class="arr">↗</span></a>
+    <a class="cbtn" href="https://github.com/Aidenn8/aircraft-snow">source on GitHub<span class="arr">↗</span></a>
   </div>
+</header>
 
-  <section aria-labelledby="h-aircraft">
-    <div class="eyebrow">The aircraft</div>
-    <h2 id="h-aircraft">Sixteen flights matched to streaks, about twelve more than chance</h2>
+<section class="row overview" aria-labelledby="h-overview">
+  <div class="lab"><h2 id="h-overview">Summary</h2></div>
+  <div class="body">
+    <p>On a cold January afternoon and evening near Denver, airliners climbing and descending through a thin
+      supercooled cloud froze some of its droplets. The ice fell out as narrow bands of snow that traced their
+      flight paths on weather radar. {{HERO_SUMMARY}}</p>
+  </div>
+</section>
+
+<section class="row" aria-labelledby="h-replay">
+  <div class="lab"><h2 id="h-replay">Denver, 25 January 2025</h2><span class="no">KFTG radar</span></div>
+  <div class="body">
+    <div class="replay-grid">
+      <div class="instrument">
+        <canvas id="replay" role="img" aria-label="Animated radar reflectivity near Denver with the tracks of aircraft and the drifted air of the aircraft matched to snow streaks"></canvas>
+        <div class="controls">
+          <button id="replay-play" type="button" aria-pressed="false">Play</button>
+          <input id="replay-time" type="range" min="0" max="1" value="0" aria-label="Radar scan time">
+          <span id="replay-clock"></span>
+        </div>
+        <div class="legend">
+          <span class="key"><span class="ramp" aria-hidden="true"></span> snow echo 0–35 dBZ</span>
+          <span class="key"><i aria-hidden="true"></i> air a seeding aircraft flew through, carried by the wind</span>
+          <span class="key"><i class="path" aria-hidden="true"></i> where it actually flew</span>
+          <span class="key"><i class="traffic" aria-hidden="true"></i> other traffic, last 30 min</span>
+        </div>
+      </div>
+      <aside class="side">
+        <p class="eyebrow">Matched aircraft</p>
+        <p>Each was matched to a streak at p &le; 0.01 against 200 rotated copies of all the
+          day's flights. Hover to highlight its air; select to jump to the match.</p>
+        <ul class="seeders" id="replay-seeders"></ul>
+        <p>Times are when the aircraft passed through the cloud layer; temperatures are the HRRR
+          analysis at its altitude.</p>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="row" aria-labelledby="h-aircraft">
+  <div class="lab"><h2 id="h-aircraft">The aircraft</h2></div>
+  <div class="body">
+    <h3>Sixteen flights matched to streaks, about twelve more than chance</h3>
     <p class="lede">Most were airliners on the arrival pattern, and most crossed the cloud at about
       3 km, in air at &minus;16 to &minus;18&nbsp;&deg;C; their snow showed up on the radar 15 to 50
-      minutes later. Rotated copies of the day's flights produce about
-      four such matches, so a few of these are probably chance; which ones cannot be told apart.</p>
-    <div class="table-wrap">
+      minutes later. Rotated copies of the day's flights produce about four such matches, so a few of
+      these are probably chance; which ones cannot be told apart.</p>
+    <div class="tbl">
       <table>
         <thead><tr><th scope="col">Flight</th><th scope="col">Type</th><th scope="col">Phase</th>
           <th scope="col">Passed (UTC)</th><th scope="col">Altitude (ft)</th><th scope="col">Air (&deg;C)</th>
@@ -169,29 +253,29 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
       Snowfall is water equivalent from the reflectivity, uncertain by a factor of a few. Two rows
       look physically odd (an airliner seeding at 20&nbsp;000 ft; one only 500 m above the beam) and
       are likely among the chance matches.</p>
-  </section>
+  </div>
+</section>
 
-  <section aria-labelledby="h-evidence">
-    <div class="eyebrow">The test</div>
-    <h2 id="h-evidence">How we know it was the aircraft</h2>
-    <div class="two-col">
-      <div class="prose">
-        <p>A thin line of snow near a busy airport will often lie along <em>some</em> flight path by
-          coincidence. So every comparison is repeated with all of the day's flights rotated around the
-          radar to other bearings: same shapes, same timing, same wind, wrong place. Rotated flights
-          match streaks too, and that is the chance level.</p>
-        <p>A match counts only if the streak lies along the flight's own track carried by the wind,
-          the air there was clear before the aircraft arrived, the air was below &minus;4&nbsp;&deg;C, and
-          the ice would have had to fall at the speed snow falls to reach the radar beam when it did.</p>
-        <p>Of <span id="n-objects">–</span> streak-shaped echoes that day, the real flights explained
-          <strong><span id="n-flights">–</span></strong> at a level the rotated copies reach
-          <strong><span id="n-expected">–</span></strong> times on average.</p>
-      </div>
-      <div class="stat-row">
-        <div class="stat"><b id="e-real">–</b><span>evidence score of the real flights</span></div>
-        <div class="stat"><b id="e-null">–</b><span>typical score of rotated copies (95% below <span id="e-q95">–</span>)</span></div>
-        <div class="stat"><b>0 of <span id="n-rot">–</span></b><span>rotated copies that did as well</span></div>
-      </div>
+<section class="row" aria-labelledby="h-evidence">
+  <div class="lab"><h2 id="h-evidence">The test</h2></div>
+  <div class="body">
+    <h3>How we know it was the aircraft</h3>
+    <div class="prose">
+      <p>A thin line of snow near a busy airport will often lie along <em>some</em> flight path by
+        coincidence. So every comparison is repeated with all of the day's flights rotated around the
+        radar to other bearings: same shapes, same timing, same wind, wrong place. Rotated flights
+        match streaks too, and that is the chance level.</p>
+      <p>A match counts only if the streak lies along the flight's own track carried by the wind,
+        the air there was clear before the aircraft arrived, the air was below &minus;4&nbsp;&deg;C, and
+        the ice would have had to fall at the speed snow falls to reach the radar beam when it did.</p>
+      <p>Of <span id="n-objects">–</span> streak-shaped echoes that day, the real flights explained
+        <strong><span id="n-flights">–</span></strong> at a level the rotated copies reach
+        <strong><span id="n-expected">–</span></strong> times on average.</p>
+    </div>
+    <div class="stats three">
+      <div class="stat"><b id="e-real">–</b><span>evidence score of the real flights</span></div>
+      <div class="stat"><b id="e-null">–</b><span>typical score of rotated copies (95% below <span id="e-q95">–</span>)</span></div>
+      <div class="stat"><b>0 of <span id="n-rot">–</span></b><span>rotated copies that did as well</span></div>
     </div>
     <p class="note">What this does not prove on its own: rotating flights also breaks any link
       between airport corridors and echo that lines up with them for other reasons. An early version
@@ -200,38 +284,42 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
       precipitation by how uniform its returns are (the correlation coefficient); with it masked,
       those days came out clean. How often false alarms remain is measured below, on warm days at
       every radar in the census.</p>
-  </section>
+  </div>
+</section>
 
-  <section aria-labelledby="h-physics">
-    <div class="eyebrow">The physics</div>
-    <h2 id="h-physics">A streak lives about an hour, and about one jet in eight made one</h2>
+<section class="row" aria-labelledby="h-physics">
+  <div class="lab"><h2 id="h-physics">The physics</h2></div>
+  <div class="body">
+    <h3>A streak lives about an hour, and about one jet in eight made one</h3>
     <div class="two-col">
-      <figure class="chart" style="margin:0">
+      <figure class="chart">
         <div id="chart-lifecycle"></div>
         <div class="chart-legend"><span><i class="sw band"></i>90% range over the matched flights</span></div>
-        <figcaption class="note">Radar echo on each matched flight's wind-carried track, minus the
+        <figcaption>Radar echo on each matched flight's wind-carried track, minus the
           echo 5&ndash;8 km to either side, followed through every scan. Between 10 and 50 minutes the
           curve partly reflects how flights were chosen; its rise before and fall after do not.</figcaption>
       </figure>
-      <figure class="chart" style="margin:0">
+      <figure class="chart">
         <div id="chart-efficiency"></div>
         <div class="chart-legend"><span><i class="sw fill"></i>jets that left a streak</span>
           <span><i class="sw ring"></i>same jets rotated (chance)</span></div>
-        <figcaption class="note">Jets entering clear air in the cloud layer (8&nbsp;650&ndash;11&nbsp;800 ft,
+        <figcaption>Jets entering clear air in the cloud layer (8&nbsp;650&ndash;11&nbsp;800 ft,
           21:20&ndash;04:40 UTC). About one in eight left a streak, eight to ten times the chance rate. Colder
           air did slightly better, but by less than the uncertainty in each bin.</figcaption>
       </figure>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section id="census" aria-labelledby="h-census" hidden>
-    <div class="eyebrow">The census</div>
-    <h2 id="h-census">Eight airports, every winter day</h2>
+<section class="row" id="census" aria-labelledby="h-census" hidden>
+  <div class="lab"><h2 id="h-census">The census</h2><span class="no">eight radars</span></div>
+  <div class="body">
+    <h3>Eight airports, every winter day</h3>
     <p class="lede">The same detector, run without anyone looking, on every day from November to
       March at eight radars near major airports, <span id="c-winters">–</span>. Each day&rsquo;s
       flights are scored against copies of the same traffic rotated around the radar, and the
       day&rsquo;s p-value says how often rotated traffic did as well.</p>
-    <div class="stat-row">
+    <div class="stats">
       <div class="stat"><b id="c-radar-days">–</b><span>radar-days examined</span></div>
       <div class="stat"><b id="c-tested">–</b><span>with cold, moist air aloft, so tested</span></div>
       <div class="stat"><b id="c-p01">–</b><span>days with streaks beyond chance (p&nbsp;&le;&nbsp;0.01),
@@ -240,15 +328,15 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
         <span id="c-cat-days">–</span> days at <span id="c-cat-radars">–</span> radars, checked by eye</span></div>
     </div>
     <div class="two-col">
-      <figure class="chart" style="margin:0">
+      <figure class="chart">
         <div id="chart-census-sites"></div>
         <div class="chart-legend" id="legend-census-sites"></div>
-        <figcaption class="note">Days with p&nbsp;&le;&nbsp;0.01 at each radar (dots) and the number
+        <figcaption>Days with p&nbsp;&le;&nbsp;0.01 at each radar (dots) and the number
           expected if aircraft never made snow (bars): 1% of the days tested.</figcaption>
       </figure>
-      <figure class="chart" style="margin:0">
+      <figure class="chart">
         <div id="chart-census-slw"></div>
-        <figcaption class="note">Share of days with p&nbsp;&le;&nbsp;0.05, by how many hours the
+        <figcaption>Share of days with p&nbsp;&le;&nbsp;0.05, by how many hours the
           weather model put supercooled cloud water over the radar. Aircraft can only make ice in
           such cloud; artefacts of the method would not care. Lines are 90% intervals.</figcaption>
       </figure>
@@ -258,26 +346,26 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
       <p id="c-band-note"></p>
     </div>
 
-    <h3 class="sub">What the streaks look like</h3>
-    <figure class="chart gallery" style="margin:0">
+    <h4>What the streaks look like</h4>
+    <figure class="gallery">
       <img id="c-gallery" alt="Nine radar snapshots from six airports and three winters, each showing a thin streak of snow lying along the path of one aircraft, carried downwind" src="{{GALLERY_IMG}}">
-      <figcaption class="note">Orange: where the aircraft flew, carried by the wind to the time of
+      <figcaption>Orange: where the aircraft flew, carried by the wind to the time of
         the radar scan. Dashed: its actual track over the previous hour. Each panel names the
         flight, its type, and the altitude and air temperature where it crossed the cloud.</figcaption>
     </figure>
 
-    <h3 class="sub">Which aircraft, and how cold</h3>
+    <h4>Which aircraft, and how cold</h4>
     <div class="two-col">
-      <figure class="chart" style="margin:0">
+      <figure class="chart">
         <div id="chart-census-phase"></div>
         <div class="chart-legend" id="legend-census-phase"></div>
-        <figcaption class="note">Jets crossing the seeding layer through clear air on catalogue
+        <figcaption>Jets crossing the seeding layer through clear air on catalogue
           days: the share that left a streak, by air temperature. Open circles are the chance
           level from rotated tracks; lines are 90% intervals.</figcaption>
       </figure>
-      <figure class="chart" style="margin:0">
+      <figure class="chart">
         <div id="chart-temps"></div>
-        <figcaption class="note">Air temperature where each catalogue flight seeded (one dot per
+        <figcaption>Air temperature where each catalogue flight seeded (one dot per
           flight; the bar is the median), against the thresholds usually quoted for jets and for
           turboprops. Hover for details.</figcaption>
       </figure>
@@ -285,7 +373,7 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
     <div class="prose">
       <p id="c-phase-note"></p>
     </div>
-    <div class="table-wrap scroll" tabindex="0" aria-label="Catalogue of flights matched to streaks">
+    <div class="tbl scroll" tabindex="0" aria-label="Catalogue of flights matched to streaks">
       <table class="catalogue">
         <thead><tr><th scope="col">Date</th><th scope="col">Radar</th><th scope="col">Flight</th>
           <th scope="col">Type</th><th scope="col">Phase</th><th scope="col">Altitude (ft)</th>
@@ -299,13 +387,18 @@ footer.sources { padding-block: 28px 0; border-top: 1px solid var(--rule); font-
       around the streak, no family of parallel bands, a fall speed snow can have, seeding below
       16&nbsp;000&nbsp;ft). Rotated traffic on the same days would produce about
       <span id="c-cat-false">–</span> matches at that level, so some rows are chance.</p>
-  </section>
+  </div>
+</section>
 
-  <footer class="sources">
-    <div>Data: ADS-B positions from adsb.lol (ODbL); NEXRAD Level II and III radar (NOAA, via AWS Open Data);
+<footer class="colophon">
+  <div>Aircraft-made snow</div>
+  <div>
+    <p><a href="https://github.com/Aidenn8">Aiden Huang</a> · 2026 · <a href="https://github.com/Aidenn8/aircraft-snow">source on GitHub</a> · code under the MIT License; result tables derived from adsb.lol data under ODbL 1.0</p>
+    <p>Data: ADS-B positions from adsb.lol (ODbL); NEXRAD Level II and III radar (NOAA, via AWS Open Data);
       HRRR analyses (NOAA, University of Utah archive); aircraft types from tar1090-db; METARs from the Iowa
-      Environmental Mesonet.</div>
-  </footer>
+      Environmental Mesonet.</p>
+  </div>
+</footer>
 </div>
 <script type="application/json" id="replay-data">{{REPLAY_JSON}}</script>
 <script type="application/json" id="page-data">{{PAGE_JSON}}</script>

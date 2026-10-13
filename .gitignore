@@ -10,3 +10,6 @@ tools/thermal/thermal.log
 tools/thermal/pgids/
 review/
 *.egg-info/
+site/index.html
+site/page_data.json
+site/denver_replay.json

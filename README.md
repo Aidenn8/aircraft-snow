@@ -1,5 +1,7 @@
 # aircraft-snow
 
+**Project page: [aidenn8.github.io/aircraft-snow](https://aidenn8.github.io/aircraft-snow/)** · full write-up in [`REPORT.md`](REPORT.md) · method notes in [`docs/methods.md`](docs/methods.md)
+
 When an airliner climbs or descends through a cloud of supercooled droplets, air cooling
 over its wings and propellers can freeze some of them. The ice grows, falls out as snow and
 drifts with the wind. On weather radar the result is a thin line of snow echo that traces
@@ -68,6 +70,11 @@ python -m venv .venv && .venv/bin/pip install -e '.[test]'
 .venv/bin/python -m pytest
 ```
 
+The census (`tools/run_census_phase_a.sh`, `tools/run_null_census.sh`), its summaries
+(`scripts/census_summary.py`, `scripts/census_analysis.py`) and the figures are described in
+`REPORT.md` and `docs/methods.md`. The project page is one self-contained file:
+`scripts/export_page_data.py` then `scripts/build_site.py` write `site/index.html`.
+
 Long runs on a laptop without a fan go through `tools/thermal/guarded_run.py`, which pauses
 the job when the machine gets hot (start `tools/thermal/daemon.sh` first).
 
@@ -78,3 +85,7 @@ the job when the machine gets hot (start `tools/thermal/daemon.sh` first).
 - Weather model: NOAA HRRR, University of Utah HRRR-Zarr archive on AWS.
 - Aircraft types: [tar1090-db](https://github.com/wiedehopf/tar1090-db).
 - Surface observations: Iowa Environmental Mesonet.
+
+Code is under the MIT License (`LICENSE`). The tables in `results/` are derived from adsb.lol data and are
+released under the ODbL 1.0, as that licence requires. The Inter font in `tools/fonts/` (used for the web
+page's figures) is under the SIL Open Font License.

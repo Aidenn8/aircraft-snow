@@ -1,7 +1,7 @@
 """Assemble site/index.html from site/template.html, the replay and page data, and the scripts.
 
 usage: build_site.py [--out site/index.html] [--data site/page_data.json]
-                     [--gallery figures/census_gallery.png] [--hero TEXT]
+                     [--gallery figures/census_gallery_dark.png] [--hero TEXT]
 
 The census gallery figure is embedded as a JPEG data URI (1600 px wide), so the page stays
 a single file.
@@ -13,6 +13,9 @@ import json
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+HERO = ("Sixteen flights were matched to streaks along their wind-drifted paths; the same flights rotated to other "
+        "bearings around the radar produce about four such matches. Run unattended at eight airports over three "
+        "winters, the same test found such streaks on 58 days where 29 would be false alarms.")
 
 
 def gallery_uri(path: pathlib.Path, width: int = 1600) -> str:
@@ -31,9 +34,9 @@ def gallery_uri(path: pathlib.Path, width: int = 1600) -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "site" / "index.html"))
-    ap.add_argument("--hero", default="")
+    ap.add_argument("--hero", default=HERO)
     ap.add_argument("--data", default=str(ROOT / "site" / "page_data.json"))
-    ap.add_argument("--gallery", default=str(ROOT / "figures" / "census_gallery.png"))
+    ap.add_argument("--gallery", default=str(ROOT / "figures" / "census_gallery_dark.png"))
     a = ap.parse_args()
     site = ROOT / "site"
     html = (site / "template.html").read_text()

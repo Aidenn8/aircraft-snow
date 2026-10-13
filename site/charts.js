@@ -181,7 +181,7 @@
       const lab = el("text", { x: m.l - 10, y: cy + 4, "text-anchor": "end", class: "axis-label" }, svg);
       lab.textContent = `${r.name} (${r.site})`;
       el("rect", { x: xs(0), y: cy - band * 0.28, width: xs(r.expected_p01) - xs(0), height: band * 0.56, rx: 2,
-                   fill: css("--rule") }, svg);
+                   fill: css("--rule-strong") }, svg);
       el("circle", { cx: xs(r.p01), cy, r: 6, fill: css("--accent-ink"), stroke: css("--panel"), "stroke-width": 2 }, svg);
       const hit = el("rect", { x: m.l, y: cy - band / 2, width: W - m.l - m.r, height: band, fill: "transparent" }, svg);
       hit.addEventListener("mousemove", (e) => showTip(e, `<b>${r.name} (${r.site})</b><br>${r.p01} days with p ≤ 0.01 ` +
@@ -191,7 +191,7 @@
     });
     const leg = document.getElementById("legend-census-sites");
     if (leg) leg.innerHTML = `<span><i class="sw" style="border-radius:50%;background:${css("--accent-ink")}"></i>observed</span>` +
-      `<span><i class="sw" style="border-radius:2px;background:${css("--rule")}"></i>expected with no seeding</span>`;
+      `<span><i class="sw" style="border-radius:2px;background:${css("--rule-strong")}"></i>expected with no seeding</span>`;
   }
 
   // ---- census: days beyond chance by hours of supercooled cloud ----
