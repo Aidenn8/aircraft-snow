@@ -1,14 +1,14 @@
 """Assemble docs/index.html (the project page, served by GitHub Pages) from site/template.html, the replay and page data, and the scripts.
 
 usage: build_site.py [--out docs/index.html] [--data site/page_data.json]
-                     [--gallery figures/census_gallery_dark.png] [--hero TEXT]
+                     [--panels figures/gallery_panels] [--hero TEXT]
 
-The census gallery figure is embedded as a JPEG data URI (1600 px wide), so the page stays
-a single file.
+The census gallery panels (fig_gallery.py --panels) are embedded as PNG data URIs with their
+titles set in HTML, so the page stays a single file and the grid reflows on narrow screens.
 """
 import argparse
 import base64
-import io
+import html as htmllib
 import json
 import pathlib
 
@@ -18,17 +18,23 @@ HERO = ("Sixteen flights were matched to streaks along their wind-drifted paths;
         "winters, the same test found such streaks on 58 days where 29 would be false alarms.")
 
 
-def gallery_uri(path: pathlib.Path, width: int = 1600) -> str:
-    if not path.exists():
-        print(f"warning: no gallery figure at {path}")
+def gallery_panels(folder: pathlib.Path) -> str:
+    meta_path = folder / "panels.json"
+    if not meta_path.exists():
+        print(f"warning: no gallery panels in {folder}")
         return ""
-    from PIL import Image
-    im = Image.open(path).convert("RGB")
-    if im.width > width:
-        im = im.resize((width, round(im.height * width / im.width)), Image.LANCZOS)
-    buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=84, optimize=True, progressive=True)
-    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    esc = htmllib.escape
+    out = []
+    for m in json.loads(meta_path.read_text()):
+        uri = "data:image/png;base64," + base64.b64encode((folder / m["file"]).read_bytes()).decode()
+        alt = (f"Radar reflectivity near {m['place']} on {m['time']}: a streak of snow along the wind-carried "
+               f"path of {m['callsign']}")
+        out.append(
+            f'        <div class="panel"><img src="{uri}" width="660" height="660" loading="lazy" alt="{esc(alt)}">\n'
+            f'          <p class="pt">{esc(m["place"])}<span>{esc(m["site"])}</span></p>\n'
+            f'          <p class="pm">{esc(m["time"])}<br><span class="mono">{esc(m["callsign"])}</span> · '
+            f'{esc(m["type"])}<br>{m["alt_ft"]:,.0f} ft · {m["temp_c"]}&nbsp;°C · {m["age_min"]} min after passing</p></div>')
+    return "\n".join(out)
 
 
 def main():
@@ -36,7 +42,7 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "docs" / "index.html"))
     ap.add_argument("--hero", default=HERO)
     ap.add_argument("--data", default=str(ROOT / "site" / "page_data.json"))
-    ap.add_argument("--gallery", default=str(ROOT / "figures" / "census_gallery_dark.png"))
+    ap.add_argument("--panels", default=str(ROOT / "figures" / "gallery_panels"))
     a = ap.parse_args()
     site = ROOT / "site"
     html = (site / "template.html").read_text()
@@ -47,7 +53,7 @@ def main():
     html = html.replace("{{PAGE_JSON}}", json.dumps(page, separators=(",", ":")).replace("</", "<\\/"))
     html = html.replace("{{CHARTS_JS}}", (site / "charts.js").read_text())
     html = html.replace("{{HERO_SUMMARY}}", a.hero)
-    html = html.replace("{{GALLERY_IMG}}", gallery_uri(pathlib.Path(a.gallery)))
+    html = html.replace("{{GALLERY_PANELS}}", gallery_panels(pathlib.Path(a.panels)))
     pathlib.Path(a.out).write_text(html)
     print(a.out, f"{len(html) / 1e6:.1f} MB")
 

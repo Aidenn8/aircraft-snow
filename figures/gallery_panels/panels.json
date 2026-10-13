@@ -1,0 +1,101 @@
+[
+ {
+  "file": "panel_0.png",
+  "place": "Denver",
+  "site": "KFTG",
+  "time": "25 Jan 2025, 19:41 UTC",
+  "callsign": "SKW5026",
+  "type": "Bombardier Regional Jet CRJ-200",
+  "alt_ft": 9700.0,
+  "temp_c": "\u221217",
+  "age_min": 36
+ },
+ {
+  "file": "panel_1.png",
+  "place": "Indianapolis",
+  "site": "KIND",
+  "time": "29 Nov 2024, 06:43 UTC",
+  "callsign": "FDX9",
+  "type": "Boeing 777-200LR / 777F",
+  "alt_ft": 5200.0,
+  "temp_c": "\u221212",
+  "age_min": 26
+ },
+ {
+  "file": "panel_2.png",
+  "place": "Chicago",
+  "site": "KLOT",
+  "time": "29 Nov 2024, 11:31 UTC",
+  "callsign": "UAL2352",
+  "type": "Boeing 737-800",
+  "alt_ft": 5300.0,
+  "temp_c": "\u221213",
+  "age_min": 39
+ },
+ {
+  "file": "panel_3.png",
+  "place": "Detroit",
+  "site": "KDTX",
+  "time": "2 Jan 2025, 11:37 UTC",
+  "callsign": "UPS1482",
+  "type": "McDonnell Douglas MD-11",
+  "alt_ft": 7400.0,
+  "temp_c": "\u221215",
+  "age_min": 44
+ },
+ {
+  "file": "panel_4.png",
+  "place": "Minneapolis",
+  "site": "KMPX",
+  "time": "15 Feb 2025, 13:13 UTC",
+  "callsign": "N127GA",
+  "type": "Beech 200 Super King Air",
+  "alt_ft": 6900.0,
+  "temp_c": "\u221213",
+  "age_min": 31
+ },
+ {
+  "file": "panel_5.png",
+  "place": "Cleveland",
+  "site": "KCLE",
+  "time": "14 Feb 2025, 01:49 UTC",
+  "callsign": "UAL1496",
+  "type": "Boeing 737 MAX 8",
+  "alt_ft": 8800.0,
+  "temp_c": "\u221219",
+  "age_min": 28
+ },
+ {
+  "file": "panel_6.png",
+  "place": "Detroit",
+  "site": "KDTX",
+  "time": "17 Feb 2024, 01:32 UTC",
+  "callsign": "EDV5056",
+  "type": "Bombardier Regional Jet CRJ-900",
+  "alt_ft": 5000.0,
+  "temp_c": "\u221214",
+  "age_min": 28
+ },
+ {
+  "file": "panel_7.png",
+  "place": "Chicago",
+  "site": "KLOT",
+  "time": "2 Feb 2026, 18:07 UTC",
+  "callsign": "ANA11",
+  "type": "Boeing 777-300ER",
+  "alt_ft": 4800.0,
+  "temp_c": "\u221211",
+  "age_min": 25
+ },
+ {
+  "file": "panel_8.png",
+  "place": "Detroit",
+  "site": "KDTX",
+  "time": "26 Nov 2025, 20:56 UTC",
+  "callsign": "DAL3121",
+  "type": "Boeing 717-200",
+  "alt_ft": 7200.0,
+  "temp_c": "\u221213",
+  "age_min": 30
+ }
+]

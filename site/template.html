@@ -1,4 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aircraft-Made Snow</title>
+<meta name="description" content="Airliners crossing supercooled cloud leave streaks of snow on weather radar. An automated census matches those streaks to the flights that made them, from open NEXRAD and ADS-B data at eight US airports over three winters.">
+<meta name="author" content="Aiden Huang">
+<meta name="theme-color" content="#000000">
+<link rel="canonical" href="https://aidenn8.github.io/aircraft-snow/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23000'/%3E%3Cpath d='M8 24L24 8' stroke='%233987e5' stroke-width='9' stroke-linecap='round' opacity='.55'/%3E%3Cpath d='M8 24L24 8' stroke='%23eb6834' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Aiden Huang">
+<meta property="og:title" content="Aircraft-made snow: an automated census from open radar and flight data">
+<meta property="og:description" content="Airliners crossing supercooled cloud leave streaks of snow on weather radar. An automated census matches those streaks to the flights that made them, from open NEXRAD and ADS-B data at eight US airports over three winters.">
+<meta property="og:url" content="https://aidenn8.github.io/aircraft-snow/">
+<meta property="og:image" content="https://aidenn8.github.io/aircraft-snow/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A thin streak of snow on weather radar lying along the wind-carried path of an aircraft">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -96,6 +116,7 @@ h4 { font: 500 16px/1.4 var(--sans); margin: 36px 0 10px }
 #replay-clock { font: 400 13.5px var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 17ch }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13.5px; color: var(--muted); align-items: center }
 .key { display: inline-flex; align-items: center; gap: 8px }
+.key i, .key .ramp { flex: none }
 .key i { display: inline-block; width: 22px; height: 3px; border-radius: 2px; background: var(--seed) }
 .key i.traffic { height: 1px; background: var(--traffic) }
 .key i.path { background: var(--seed-path); height: 2px }
@@ -127,7 +148,15 @@ figcaption b { color: var(--ink); font-weight: 500 }
 .chart-legend .sw.ring { border: 1.5px solid var(--muted) }
 .chart-legend .sw.band { border-radius: 2px; width: 18px; height: 8px; background: var(--seed); opacity: 0.35 }
 .gallery { margin: 12px 0 34px }
-.gallery img { width: 100%; height: auto; display: block; background: #000 }
+.gallery .chart-legend { margin: 0 0 18px }
+.panels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 20px }
+.panel img { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; background: #000; border: 1px solid var(--rule) }
+.panel .pt { margin: 12px 0 3px; font-size: 14.5px; line-height: 1.4; color: var(--ink) }
+.panel .pt span { font: 400 12.5px var(--mono); color: var(--muted); margin-left: 6px }
+.panel .pm { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); font-variant-numeric: tabular-nums }
+.panel .pm .mono { color: var(--ink-2); font-size: 12.5px }
+.key i.dash { height: 0; background: none; border-top: 1.5px dashed var(--ink-2); border-radius: 0 }
+.ramp.dbz { background: linear-gradient(90deg, #0b1d33, #123058, #1a4a86, #2a6fc0, #4f95e6, #8fbdf2, #d3e6fb) }
 .tip { position: fixed; z-index: 10; pointer-events: none; background: #111; color: var(--ink); border: 1px solid var(--rule-strong);
   border-radius: 6px; padding: 8px 11px; font-size: 13px; line-height: 1.45; max-width: 260px }
 .tip .muted { color: var(--muted) }
@@ -164,14 +193,19 @@ td:nth-child(n+4), th:nth-child(n+4) { text-align: right }
   .lab .no { margin-top: 0 }
   .stats, .stats.three { grid-template-columns: repeat(2, minmax(0, 1fr)) }
   .replay-grid, .two-col { grid-template-columns: minmax(0, 1fr) }
+  .panels { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 14px }
 }
 @media (max-width: 640px) {
   body { padding: 24px 16px 56px; font-size: 16.5px }
   .overview .body > p { font-size: 17.5px }
   .stat b { font-size: 25px }
+  .panel .pt { font-size: 13.5px; margin-top: 9px }
+  .panel .pm { font-size: 12px; line-height: 1.45 }
+  .panel .pm .mono { font-size: 11.5px }
 }
 </style>
-
+</head>
+<body>
 <div class="page">
 <nav class="top"><a class="brand" href="#">Aircraft-made snow</a><div class="links">
   <a href="https://github.com/Aidenn8/aircraft-snow/blob/research/REPORT.md">Report</a>
@@ -348,12 +382,18 @@ td:nth-child(n+4), th:nth-child(n+4) { text-align: right }
 
     <h4>What the streaks look like</h4>
     <figure class="gallery">
-      <img id="c-gallery" alt="Nine radar snapshots from six airports and three winters, each showing a thin streak of snow lying along the path of one aircraft, carried downwind" src="{{GALLERY_IMG}}">
-      <figcaption>Orange: where the aircraft flew, carried by the wind to the time of
-        the radar scan. Dashed: its actual track over the previous hour. Each panel names the
-        flight, its type, and the altitude and air temperature where it crossed the cloud.</figcaption>
+      <div class="chart-legend legend">
+        <span class="key"><i aria-hidden="true"></i> where the aircraft flew, carried by the wind to the scan time</span>
+        <span class="key"><i class="dash" aria-hidden="true"></i> its own track over the previous hour</span>
+        <span class="key"><span class="ramp dbz" aria-hidden="true"></span> reflectivity 0–30 dBZ</span>
+      </div>
+      <div class="panels">
+{{GALLERY_PANELS}}
+      </div>
+      <figcaption>Nine catalogue streaks from six airports and three winters, each 44&nbsp;km across, centred on
+        the streak. Each panel gives the flight, its type, and the altitude and air temperature where it crossed
+        the cloud.</figcaption>
     </figure>
-
     <h4>Which aircraft, and how cold</h4>
     <div class="two-col">
       <figure class="chart">
@@ -404,3 +444,5 @@ td:nth-child(n+4), th:nth-child(n+4) { text-align: right }
 <script type="application/json" id="page-data">{{PAGE_JSON}}</script>
 <script>{{REPLAY_JS}}</script>
 <script>{{CHARTS_JS}}</script>
+</body>
+</html>

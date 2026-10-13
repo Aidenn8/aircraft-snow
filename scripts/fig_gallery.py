@@ -1,6 +1,7 @@
 """Gallery of census cases: one panel per aircraft streak, from different radars and days.
 
 usage: fig_gallery.py CASES.csv --out FIG.png [--cols 3] [--alpha 0.05] [--title TEXT] [--dark]
+       fig_gallery.py CASES.csv --panels DIR [--alpha 0.05]
 
 CASES.csv has columns site, day (YYYY-MM-DD, the 12 UTC radar-day), time (HH:MM UTC, the
 scan to show) and callsign, and optionally half_km (panel half-width, default 22). Each
@@ -9,9 +10,14 @@ that scan (p <= --alpha), the flight's own track over the previous hour, and the
 it that matched: the seeding points carried by the wind to the scan time. The panel title
 gives the radar and time, the flight, its type, the seeding altitude and temperature (HRRR)
 and the time since the aircraft passed.
+
+With --panels the cases are drawn for the web page instead: one square dark image per case
+(no axes; a 10 km scale bar) in DIR/panel_N.png, and their titles in DIR/panels.json, so the
+page can set the text itself and reflow the grid on narrow screens.
 """
 import argparse
 import datetime as dt
+import json
 import pathlib
 
 import matplotlib
@@ -41,77 +47,125 @@ def scan_time(day: dt.date, hhmm: str) -> dt.datetime:
     return T + dt.timedelta(days=1) if T < t0 else T
 
 
+def case_data(c, preps: dict, names: dict, alpha: float) -> dict:
+    """Everything one panel needs: the scan, the streak match and the flight's seeding points."""
+    day = dt.date.fromisoformat(c.day)
+    key = (c.site, c.day)
+    if key not in preps:
+        prep = pipeline.prepare(c.site, day)
+        calls = pd.concat([flights.load_calls(day, c.site), flights.load_calls(day + dt.timedelta(days=1), c.site)])
+        S = pd.read_parquet(ROOT / "data" / "events" / c.site / f"{day}_streaks.parquet")
+        preps[key] = (prep, flights.flight_table(prep["positions"], calls), S, pipeline.matching_points(prep))
+    prep, ft, S, (pts, dr) = preps[key]
+    G = prep["grids"]
+    xs = G.x0 + G.res * np.arange(G.z.shape[2])
+    ys = G.y0 + G.res * np.arange(G.z.shape[1])
+    k = int(np.argmin(np.abs(G.t - scan_time(day, c.time).timestamp())))
+    Tk = G.t[k]
+    ids = ft.index[ft.callsign.str.strip() == c.callsign.strip()]
+    m = S[(np.abs(S.t - Tk) < 1.0) & S.flight.isin(ids) & (S.coverage > 0) & (S.p_value <= alpha)]
+    if m.empty:
+        raise SystemExit(f"{c.site} {c.day} {c.time} {c.callsign}: no match at p <= {alpha} in that scan")
+    o = m.sort_values("p_value").iloc[0]
+    info = ft.loc[o.flight]
+    z = G.z[k]
+    zz = np.where(np.isnan(z), streaks.FLOOR_DBZ, z)
+    _, lab = streaks.find_streaks(streaks.GridScan(Tk, xs, ys, zz, np.isfinite(z)))
+    sx, sy = match.skeleton_xy(lab, int(o.label), xs, ys)
+    mp = match.matched_points(sx, sy, pts, dr, Tk, int(o.flight), o.du, o.dv)
+    age = Tk - mp.t.to_numpy(float)
+    idx = mp.index.to_numpy()
+    px = mp.x.to_numpy() + (dr[idx, 0] + o.du) * age
+    py = mp.y.to_numpy() + (dr[idx, 1] + o.dv) * age
+    order = np.argsort(mp.t.to_numpy())
+    half = float(getattr(c, "half_km", np.nan)) if hasattr(c, "half_km") else np.nan
+    half = 22.0 if not np.isfinite(half) else half
+    pos = prep["positions"]
+    tr = pos[(pos.flight == o.flight) & (pos.t > Tk - 3600) & (pos.t <= Tk)]
+    when = pd.Timestamp(Tk, unit="s", tz="UTC")
+    alt = float(np.median(mp.alt_ft)) if "alt_ft" in mp else float(o.seed_alt_ft)
+    temp = float(np.median(mp.temp_c)) if "temp_c" in mp else np.nan
+    return {"xs": xs / 1e3, "ys": ys / 1e3, "z": z, "track": (tr.x.to_numpy() / 1e3, tr.y.to_numpy() / 1e3),
+            "seed": (px[order] / 1e3, py[order] / 1e3), "cx": o.x / 1e3, "cy": o.y / 1e3, "half": half,
+            "site": c.site, "place": names.get(c.site, c.site), "when": when,
+            "callsign": info.callsign.strip(), "type": aircraft.display_name(info.icao_type),
+            "alt_ft": round(alt, -2), "temp_c": temp, "age_min": round(o.age_s / 60)}
+
+
+def draw_panel(ax, d: dict):
+    im = ax.pcolormesh(d["xs"], d["ys"], np.where(np.isnan(d["z"]), -99, d["z"]), cmap=figstyle.REFLECTIVITY,
+                       vmin=0, vmax=30, shading="nearest", rasterized=True)
+    ax.plot(*d["track"], color=figstyle.INK_2, lw=0.9, ls=(0, (3, 2)))
+    ax.plot(*d["seed"], color=figstyle.ORANGE, lw=2.0)
+    cx, cy, half = d["cx"], d["cy"], d["half"]
+    if abs(cx) < half and abs(cy) < half:
+        ax.plot(0, 0, marker="^", color=figstyle.INK, ms=6, ls="none")
+    ax.set_xlim(cx - half, cx + half)
+    ax.set_ylim(cy - half, cy + half)
+    ax.set_aspect(1)
+    return im
+
+
+def write_panels(cases, preps, names, alpha, out: pathlib.Path):
+    """One square image per case for the web page, titles in panels.json."""
+    out.mkdir(parents=True, exist_ok=True)
+    meta = []
+    for i, c in enumerate(cases.itertuples()):
+        d = case_data(c, preps, names, alpha)
+        fig = plt.figure(figsize=(4.4, 4.4))
+        ax = fig.add_axes((0, 0, 1, 1))
+        draw_panel(ax, d)
+        ax.set_axis_off()
+        x0, y0, half = d["cx"] - d["half"], d["cy"] - d["half"], d["half"]
+        bx, by = x0 + 0.07 * 2 * half, y0 + 0.07 * 2 * half
+        ax.plot([bx, bx + 10], [by, by], color=figstyle.INK, lw=2.4, solid_capstyle="butt")
+        ax.text(bx, by + 0.025 * 2 * half, "10 km", color=figstyle.INK, fontsize=14, va="bottom")
+        path = out / f"panel_{i}.png"
+        fig.savefig(path, dpi=150, bbox_inches=None, pad_inches=0)
+        plt.close(fig)
+        meta.append({"file": path.name, "place": d["place"], "site": d["site"],
+                     "time": f"{d['when']:%-d %b %Y, %H:%M} UTC", "callsign": d["callsign"], "type": d["type"],
+                     "alt_ft": d["alt_ft"], "temp_c": minus(d["temp_c"]), "age_min": d["age_min"]})
+        print(path)
+    (out / "panels.json").write_text(json.dumps(meta, indent=1) + "\n")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cases")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out")
+    ap.add_argument("--panels", help="write one web panel per case to this directory instead of a grid figure")
     ap.add_argument("--cols", type=int, default=3)
     ap.add_argument("--alpha", type=float, default=0.05)
     ap.add_argument("--title", default="")
     ap.add_argument("--dark", action="store_true", help="black background and Inter, for the web page")
     a = ap.parse_args()
-    figstyle.apply(dark=a.dark)
+    if not (a.out or a.panels):
+        ap.error("give --out or --panels")
+    figstyle.apply(dark=a.dark or bool(a.panels))
     cases = pd.read_csv(a.cases, dtype={"time": str})
     names = site_names()
+    preps: dict = {}
+    if a.panels:
+        write_panels(cases, preps, names, a.alpha, pathlib.Path(a.panels))
+        return
     n = len(cases)
     cols = min(a.cols, n)
     rows = int(np.ceil(n / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(4.6 * cols + 1.0, 4.9 * rows + 0.6), squeeze=False,
                              layout="constrained")
-    preps: dict = {}
     im = None
     for ax, c in zip(axes.flat, cases.itertuples()):
-        day = dt.date.fromisoformat(c.day)
-        key = (c.site, c.day)
-        if key not in preps:
-            prep = pipeline.prepare(c.site, day)
-            calls = pd.concat([flights.load_calls(day, c.site), flights.load_calls(day + dt.timedelta(days=1), c.site)])
-            S = pd.read_parquet(ROOT / "data" / "events" / c.site / f"{day}_streaks.parquet")
-            preps[key] = (prep, flights.flight_table(prep["positions"], calls), S, pipeline.matching_points(prep))
-        prep, ft, S, (pts, dr) = preps[key]
-        G = prep["grids"]
-        xs = G.x0 + G.res * np.arange(G.z.shape[2])
-        ys = G.y0 + G.res * np.arange(G.z.shape[1])
-        k = int(np.argmin(np.abs(G.t - scan_time(day, c.time).timestamp())))
-        Tk = G.t[k]
-        ids = ft.index[ft.callsign.str.strip() == c.callsign.strip()]
-        m = S[(np.abs(S.t - Tk) < 1.0) & S.flight.isin(ids) & (S.coverage > 0) & (S.p_value <= a.alpha)]
-        if m.empty:
-            raise SystemExit(f"{c.site} {c.day} {c.time} {c.callsign}: no match at p <= {a.alpha} in that scan")
-        o = m.sort_values("p_value").iloc[0]
-        info = ft.loc[o.flight]
-        z = G.z[k]
-        zz = np.where(np.isnan(z), streaks.FLOOR_DBZ, z)
-        _, lab = streaks.find_streaks(streaks.GridScan(Tk, xs, ys, zz, np.isfinite(z)))
-        sx, sy = match.skeleton_xy(lab, int(o.label), xs, ys)
-        mp = match.matched_points(sx, sy, pts, dr, Tk, int(o.flight), o.du, o.dv)
-        age = Tk - mp.t.to_numpy(float)
-        idx = mp.index.to_numpy()
-        px = mp.x.to_numpy() + (dr[idx, 0] + o.du) * age
-        py = mp.y.to_numpy() + (dr[idx, 1] + o.dv) * age
-        order = np.argsort(mp.t.to_numpy())
-        half = float(getattr(c, "half_km", np.nan)) if hasattr(c, "half_km") else np.nan
-        half = 22.0 if not np.isfinite(half) else half
-        cx, cy = o.x / 1e3, o.y / 1e3
-        im = ax.pcolormesh(xs / 1e3, ys / 1e3, np.where(np.isnan(z), -99, z), cmap=figstyle.REFLECTIVITY,
-                           vmin=0, vmax=30, shading="nearest", rasterized=True)
-        pos = prep["positions"]
-        tr = pos[(pos.flight == o.flight) & (pos.t > Tk - 3600) & (pos.t <= Tk)]
-        ax.plot(tr.x / 1e3, tr.y / 1e3, color=figstyle.INK_2, lw=0.9, ls=(0, (3, 2)))
-        ax.plot(px[order] / 1e3, py[order] / 1e3, color=figstyle.ORANGE, lw=2.0)
-        if abs(cx) < half and abs(cy) < half:
-            ax.plot(0, 0, marker="^", color=figstyle.INK, ms=6, ls="none")
+        d = case_data(c, preps, names, a.alpha)
+        im = draw_panel(ax, d)
         figstyle.map_axes(ax)
         ax.set_xlabel("")
         ax.set_ylabel("")
-        ax.set_xlim(cx - half, cx + half)
-        ax.set_ylim(cy - half, cy + half)
-        when = pd.Timestamp(Tk, unit="s", tz="UTC")
-        alt = float(np.median(mp.alt_ft)) if "alt_ft" in mp else float(o.seed_alt_ft)
-        temp = float(np.median(mp.temp_c)) if "temp_c" in mp else np.nan
-        ax.set_title(f"{names.get(c.site, c.site)} ({c.site}), {when:%-d %b %Y %H:%M} UTC\n"
-                     f"{info.callsign.strip()} · {aircraft.display_name(info.icao_type)}\n"
-                     f"{round(alt, -2):,.0f} ft · {minus(temp)} °C · {o.age_s / 60:.0f} min after passing",
+        ax.set_xlim(d["cx"] - d["half"], d["cx"] + d["half"])
+        ax.set_ylim(d["cy"] - d["half"], d["cy"] + d["half"])
+        ax.set_title(f"{d['place']} ({d['site']}), {d['when']:%-d %b %Y %H:%M} UTC\n"
+                     f"{d['callsign']} · {d['type']}\n"
+                     f"{d['alt_ft']:,.0f} ft · {minus(d['temp_c'])} °C · {d['age_min']:.0f} min after passing",
                      fontsize=9.5, fontweight="normal", linespacing=1.35)
     for ax in axes.flat[n:]:
         ax.axis("off")
