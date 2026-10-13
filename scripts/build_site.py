@@ -1,6 +1,6 @@
-"""Assemble site/index.html from site/template.html, the replay and page data, and the scripts.
+"""Assemble docs/index.html (the project page, served by GitHub Pages) from site/template.html, the replay and page data, and the scripts.
 
-usage: build_site.py [--out site/index.html] [--data site/page_data.json]
+usage: build_site.py [--out docs/index.html] [--data site/page_data.json]
                      [--gallery figures/census_gallery_dark.png] [--hero TEXT]
 
 The census gallery figure is embedded as a JPEG data URI (1600 px wide), so the page stays
@@ -33,7 +33,7 @@ def gallery_uri(path: pathlib.Path, width: int = 1600) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=str(ROOT / "site" / "index.html"))
+    ap.add_argument("--out", default=str(ROOT / "docs" / "index.html"))
     ap.add_argument("--hero", default=HERO)
     ap.add_argument("--data", default=str(ROOT / "site" / "page_data.json"))
     ap.add_argument("--gallery", default=str(ROOT / "figures" / "census_gallery_dark.png"))
